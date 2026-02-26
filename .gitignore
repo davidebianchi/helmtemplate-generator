@@ -1,0 +1,16 @@
+# Binary
+helmtemplate-generator
+helmgen
+bin/
+
+# Test coverage
+coverage.out
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store

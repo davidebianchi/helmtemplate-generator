@@ -1,0 +1,78 @@
+# Example configuration
+# This transforms Kubernetes manifests into Helm templates
+
+global:
+  # Remove these fields from all resources
+  delete:
+    - .status
+    - .metadata.uid
+    - .metadata.resourceVersion
+    - .metadata.creationTimestamp
+    - .metadata.generation
+    - .metadata.managedFields
+
+rules:
+  # Replace namespace with Helm template in all resources
+  - path: .metadata.namespace
+    value: '{{ include "mychart.namespace" . }}'
+
+  # Wrap all Deployments with enabled condition
+  - match:
+      kinds:
+        - Deployment
+    wrap:
+      before: '{{- if .Values.enabled }}'
+      after: '{{- end }}'
+
+  # Specific changes for Deployments
+  - match:
+      kinds:
+        - Deployment
+    changes:
+      - path: .spec.replicas
+        value: '{{ .Values.replicas | default 1 }}'
+      - path: .spec.template.spec.containers[0].image
+        value: '{{ .Values.image.repository }}:{{ .Values.image.tag }}'
+
+  # Replace imagePullSecrets with Helm template block
+  - match:
+      kinds:
+        - Deployment
+    path: .spec.template.spec.imagePullSecrets
+    replaceWith: |
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+  # ServiceAccount specific changes
+  - match:
+      kinds:
+        - ServiceAccount
+    changes:
+      - path: .metadata.namespace
+        value: '{{ .Release.Namespace }}'
+
+  # Wrap CRDs with installCRDs condition
+  - match:
+      kinds:
+        - CustomResourceDefinition
+    wrap:
+      before: '{{- if .Values.installCRDs }}'
+      after: '{{- end }}'
+
+  # Match resources by name pattern
+  - match:
+      kinds:
+        - ClusterRole
+      name: 'opendatahub-*'
+    changes:
+      - path: .metadata.labels.app
+        value: '{{ .Chart.Name }}'
+
+  # Delete specific annotations
+  - match:
+      kinds:
+        - Deployment
+    path: .metadata.annotations.kubectl\.kubernetes\.io/last-applied-configuration
+    action: delete
