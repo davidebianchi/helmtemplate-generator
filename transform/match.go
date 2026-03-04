@@ -27,11 +27,18 @@ func MatchesDocument(doc *Document, match *config.Match) bool {
 		}
 	}
 
-	// Check name (supports wildcards)
-	if match.Name != "" {
+	// Check names (supports wildcards, matches if ANY pattern matches)
+	if len(match.Names) > 0 {
 		docName := doc.GetName()
-		matched, err := filepath.Match(match.Name, docName)
-		if err != nil || !matched {
+		nameMatched := false
+		for _, pattern := range match.Names {
+			matched, err := filepath.Match(pattern, docName)
+			if err == nil && matched {
+				nameMatched = true
+				break
+			}
+		}
+		if !nameMatched {
 			return false
 		}
 	}

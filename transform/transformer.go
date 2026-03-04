@@ -37,6 +37,9 @@ func (t *Transformer) TransformDocuments(input []byte) ([]TransformedDocument, e
 		return nil, fmt.Errorf("failed to parse documents: %w", err)
 	}
 
+	// Apply top-level filter before processing
+	docs = FilterDocuments(docs, t.config.Filter)
+
 	results := make([]TransformedDocument, 0, len(docs))
 	for _, doc := range docs {
 		kind := doc.GetKind()
@@ -68,6 +71,9 @@ func (t *Transformer) Transform(input []byte) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to parse documents: %w", err)
 	}
+
+	// Apply top-level filter before processing
+	docs = FilterDocuments(docs, t.config.Filter)
 
 	outputs := make([]string, 0, len(docs))
 	for _, doc := range docs {
@@ -369,9 +375,16 @@ func matchesDirectoryRule(doc TransformedDocument, match *config.Match) bool {
 		}
 	}
 
-	// Check name pattern
-	if match.Name != "" {
-		if !matchWildcard(match.Name, doc.Name) {
+	// Check name patterns (matches if ANY pattern matches)
+	if len(match.Names) > 0 {
+		nameMatched := false
+		for _, pattern := range match.Names {
+			if matchWildcard(pattern, doc.Name) {
+				nameMatched = true
+				break
+			}
+		}
+		if !nameMatched {
 			return false
 		}
 	}

@@ -111,7 +111,8 @@ rules:
       kinds:
         - Deployment
         - StatefulSet
-      name: "my-*"            # Wildcard name matching
+      names:                   # Wildcard name matching (matches ANY)
+        - "my-*"
       labels:                  # All labels must match
         app: myapp
 ```

@@ -41,6 +41,12 @@ var validChangeActions = map[string]bool{
 }
 
 func (cfg *Config) validate() error {
+	if cfg.Filter != nil {
+		if len(cfg.Filter.Include) == 0 && len(cfg.Filter.Exclude) == 0 {
+			return fmt.Errorf("filter: must specify at least one of include or exclude")
+		}
+	}
+
 	for i, rule := range cfg.Rules {
 		if rule.Path == "" && len(rule.Changes) == 0 && rule.Wrap == nil {
 			return fmt.Errorf("rule %d: must specify at least one of path, changes, or wrap", i)

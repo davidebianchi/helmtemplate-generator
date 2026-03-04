@@ -1,6 +1,23 @@
 # Example configuration
 # This transforms Kubernetes manifests into Helm templates
 
+# Top-level resource filtering (applied before any rules)
+# Include is scoped by kind: only restricts resources whose kind is mentioned.
+# Resources of other kinds pass through unfiltered.
+filter:
+  include:
+    # For Deployments, only process those matching the name pattern
+    - kinds:
+        - Deployment
+      names:
+        - "my-*"
+  exclude:
+    # Exclude specific ConfigMaps by name
+    - kinds:
+        - ConfigMap
+      names:
+        - "kube-root-ca*"
+
 global:
   # Remove these fields from all resources
   delete:
@@ -65,7 +82,8 @@ rules:
   - match:
       kinds:
         - ClusterRole
-      name: 'opendatahub-*'
+      names:
+        - 'opendatahub-*'
     changes:
       - path: .metadata.labels.app
         value: '{{ .Chart.Name }}'
