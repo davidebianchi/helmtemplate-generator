@@ -62,6 +62,14 @@ rules:
         {{- toYaml . | nindent 8 }}
       {{- end }}
 
+  # Append extra env vars to a container's existing env array
+  - match:
+      kinds:
+        - Deployment
+    path: .spec.template.spec.containers[0].env
+    appendWith: |
+      {{- include "mychart.extraEnv" . | nindent 12 }}
+
   # ServiceAccount specific changes
   - match:
       kinds:

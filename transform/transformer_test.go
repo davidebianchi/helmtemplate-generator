@@ -513,3 +513,160 @@ data:
 
 	require.NotContains(t, output, "annotations:")
 }
+
+func TestTransform_AppendWith(t *testing.T) {
+	cfg := &config.Config{
+		Rules: []config.Rule{
+			{
+				Match:      &config.Match{Kinds: []string{kindDeployment}},
+				Path:       ".spec.template.spec.containers[0].env",
+				AppendWith: `{{- include "myapp.extraEnv" . | nindent 12 }}`,
+			},
+		},
+	}
+
+	input := `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-deployment
+spec:
+  template:
+    spec:
+      containers:
+        - name: my-container
+          env:
+            - name: FOO
+              value: bar`
+
+	transformer := New(cfg)
+	output, err := transformer.Transform([]byte(input))
+	require.NoError(t, err)
+
+	// Should preserve existing env var
+	require.Contains(t, output, "name: FOO")
+	require.Contains(t, output, "value: bar")
+	// Should contain appended content
+	require.Contains(t, output, `{{- include "myapp.extraEnv" . | nindent 12 }}`)
+}
+
+func TestTransform_AppendWith_PreservesExistingElements(t *testing.T) {
+	cfg := &config.Config{
+		Rules: []config.Rule{
+			{
+				Match:      &config.Match{Kinds: []string{kindDeployment}},
+				Path:       ".spec.template.spec.containers[0].env",
+				AppendWith: `{{- include "myapp.extraEnv" . | nindent 12 }}`,
+			},
+		},
+	}
+
+	input := `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-deployment
+spec:
+  template:
+    spec:
+      containers:
+        - name: my-container
+          env:
+            - name: FOO
+              value: bar
+            - name: BAZ
+              value: qux`
+
+	transformer := New(cfg)
+	output, err := transformer.Transform([]byte(input))
+	require.NoError(t, err)
+
+	// Both existing env vars should be preserved
+	require.Contains(t, output, "name: FOO")
+	require.Contains(t, output, "name: BAZ")
+	// Appended content should follow
+	require.Contains(t, output, `{{- include "myapp.extraEnv" . | nindent 12 }}`)
+}
+
+func TestTransform_AppendWith_NoMatch(t *testing.T) {
+	cfg := &config.Config{
+		Rules: []config.Rule{
+			{
+				Match:      &config.Match{Kinds: []string{kindDeployment}},
+				Path:       ".spec.template.spec.containers[0].env",
+				AppendWith: `{{- include "myapp.extraEnv" . | nindent 12 }}`,
+			},
+		},
+	}
+
+	input := `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-config
+data:
+  key: value`
+
+	transformer := New(cfg)
+	output, err := transformer.Transform([]byte(input))
+	require.NoError(t, err)
+
+	// Should not contain the appended content since it's a ConfigMap
+	require.NotContains(t, output, "extraEnv")
+}
+
+func TestTransform_AppendWith_InChanges(t *testing.T) {
+	cfg := &config.Config{
+		Rules: []config.Rule{
+			{
+				Match: &config.Match{Kinds: []string{kindDeployment}},
+				Changes: []config.Change{
+					{
+						Path:       ".spec.template.spec.containers[0].env",
+						AppendWith: `{{- include "myapp.extraEnv" . | nindent 12 }}`,
+					},
+				},
+			},
+		},
+	}
+
+	input := `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-deployment
+spec:
+  template:
+    spec:
+      containers:
+        - name: my-container
+          env:
+            - name: FOO
+              value: bar`
+
+	transformer := New(cfg)
+	output, err := transformer.Transform([]byte(input))
+	require.NoError(t, err)
+
+	require.Contains(t, output, "name: FOO")
+	require.Contains(t, output, `{{- include "myapp.extraEnv" . | nindent 12 }}`)
+}
+
+func TestTransform_AppendWith_NonSequenceError(t *testing.T) {
+	cfg := &config.Config{
+		Rules: []config.Rule{
+			{
+				Path:       ".metadata.name",
+				AppendWith: "some content",
+			},
+		},
+	}
+
+	input := `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-config
+data:
+  key: value`
+
+	transformer := New(cfg)
+	_, err := transformer.Transform([]byte(input))
+	require.Error(t, err)
+	require.ErrorContains(t, err, "sequence")
+}

@@ -7,6 +7,7 @@ A CLI tool that transforms Kubernetes YAML manifests into Helm templates using c
 `helmtemplate-generator` reads Kubernetes resource manifests (YAML) and applies transformation rules from a configuration file to produce Helm chart templates. It supports:
 
 - Replacing field values with Helm template expressions
+- Appending raw content to existing YAML arrays
 - Deleting fields
 - Wrapping entire resources or field values with Helm conditionals
 - Injecting raw Helm template blocks
@@ -167,6 +168,20 @@ rules:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+```
+
+#### Appending to arrays
+
+Append raw content after the last element of an existing YAML array. Unlike `replaceWith`, this preserves all existing array elements.
+
+```yaml
+rules:
+  - match:
+      kinds:
+        - Deployment
+    path: .spec.template.spec.containers[0].env
+    appendWith: |
+      {{- include "mychart.extraEnv" . | nindent 12 }}
 ```
 
 ### `output`

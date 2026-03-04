@@ -73,6 +73,8 @@ type Rule struct {
 	Wrap *Wrap `yaml:"wrap,omitempty"`
 	// ReplaceWith replaces the field at path with raw content
 	ReplaceWith string `yaml:"replaceWith,omitempty"`
+	// AppendWith appends raw content to the end of an array at path
+	AppendWith string `yaml:"appendWith,omitempty"`
 	// InjectRaw injects raw content at the path
 	InjectRaw *InjectRaw `yaml:"injectRaw,omitempty"`
 }
@@ -97,6 +99,8 @@ type Change struct {
 	Action string `yaml:"action,omitempty"`
 	// ReplaceWith replaces the field with raw content
 	ReplaceWith string `yaml:"replaceWith,omitempty"`
+	// AppendWith appends raw content to the end of an array at path
+	AppendWith string `yaml:"appendWith,omitempty"`
 	// WrapValue wraps the field value with conditions
 	WrapValue *WrapValue `yaml:"wrapValue,omitempty"`
 }
