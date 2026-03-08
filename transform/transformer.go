@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/davidebianchi/helmtemplate-generator/config"
+	"gopkg.in/yaml.v3"
 )
 
 const actionSet = "set"
@@ -36,6 +37,9 @@ func (t *Transformer) TransformDocuments(input []byte) ([]TransformedDocument, e
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse documents: %w", err)
 	}
+
+	// Apply top-level filter before processing
+	docs = FilterDocuments(docs, t.config.Filter)
 
 	results := make([]TransformedDocument, 0, len(docs))
 	for _, doc := range docs {
@@ -68,6 +72,9 @@ func (t *Transformer) Transform(input []byte) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to parse documents: %w", err)
 	}
+
+	// Apply top-level filter before processing
+	docs = FilterDocuments(docs, t.config.Filter)
 
 	outputs := make([]string, 0, len(docs))
 	for _, doc := range docs {
@@ -149,6 +156,7 @@ type fieldReplacement struct {
 	content     string
 	fieldKey    string
 	wrapValue   *config.WrapValue
+	isAppend    bool
 }
 
 func (t *Transformer) applyPathChange(doc *Document, rule *config.Rule, replacements *[]fieldReplacement) error {
@@ -178,6 +186,16 @@ func (t *Transformer) applyPathChange(doc *Document, rule *config.Rule, replacem
 				fieldKey:    getLastPathKey(segments),
 			})
 			return SetValueAtPath(doc.Root, segments, placeholder)
+		}
+		if rule.AppendWith != "" {
+			placeholder := fmt.Sprintf("__HELMGEN_APPEND_%d__", len(*replacements))
+			*replacements = append(*replacements, fieldReplacement{
+				placeholder: placeholder,
+				content:     rule.AppendWith,
+				fieldKey:    getLastPathKey(segments),
+				isAppend:    true,
+			})
+			return appendPlaceholderToSequence(doc.Root, segments, placeholder)
 		}
 	case "inject":
 		if rule.InjectRaw != nil {
@@ -216,6 +234,16 @@ func (t *Transformer) applyChange(doc *Document, change *config.Change, replacem
 				fieldKey:    getLastPathKey(segments),
 			})
 			return SetValueAtPath(doc.Root, segments, placeholder)
+		}
+		if change.AppendWith != "" {
+			placeholder := fmt.Sprintf("__HELMGEN_APPEND_%d__", len(*replacements))
+			*replacements = append(*replacements, fieldReplacement{
+				placeholder: placeholder,
+				content:     change.AppendWith,
+				fieldKey:    getLastPathKey(segments),
+				isAppend:    true,
+			})
+			return appendPlaceholderToSequence(doc.Root, segments, placeholder)
 		}
 		if change.WrapValue != nil {
 			placeholder := fmt.Sprintf("__HELMGEN_WRAP_%d__", len(*replacements))
@@ -259,6 +287,29 @@ func (t *Transformer) applyInjectRaw(
 			node.LineComment = placeholder
 		}
 	}
+
+	return nil
+}
+
+// appendPlaceholderToSequence navigates to the SequenceNode at the given path
+// and appends a placeholder scalar as the last element.
+func appendPlaceholderToSequence(root *yaml.Node, segments []PathSegment, placeholder string) error {
+	node, _, _, err := GetNodeAtPath(root, segments)
+	if err != nil {
+		return fmt.Errorf("failed to navigate to path for appendWith: %w", err)
+	}
+	if node == nil {
+		return fmt.Errorf("node not found at path for appendWith")
+	}
+	if node.Kind != yaml.SequenceNode {
+		return fmt.Errorf("appendWith requires a sequence (array) node, got kind %d", node.Kind)
+	}
+
+	node.Content = append(node.Content, &yaml.Node{
+		Kind:  yaml.ScalarNode,
+		Value: placeholder,
+		Tag:   "!!str",
+	})
 
 	return nil
 }
@@ -369,9 +420,16 @@ func matchesDirectoryRule(doc TransformedDocument, match *config.Match) bool {
 		}
 	}
 
-	// Check name pattern
-	if match.Name != "" {
-		if !matchWildcard(match.Name, doc.Name) {
+	// Check name patterns (matches if ANY pattern matches)
+	if len(match.Names) > 0 {
+		nameMatched := false
+		for _, pattern := range match.Names {
+			if matchWildcard(pattern, doc.Name) {
+				nameMatched = true
+				break
+			}
+		}
+		if !nameMatched {
 			return false
 		}
 	}

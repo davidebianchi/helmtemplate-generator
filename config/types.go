@@ -1,7 +1,20 @@
 package config
 
+// Filter defines top-level resource filtering rules.
+// Resources are filtered before any transformation rules are applied.
+type Filter struct {
+	// Include specifies criteria for resources to include (scoped by kind).
+	// Only restricts resources whose kind is mentioned; other kinds pass through.
+	Include []Match `yaml:"include,omitempty"`
+	// Exclude specifies criteria for resources to exclude.
+	// Resources matching any entry are excluded from processing.
+	Exclude []Match `yaml:"exclude,omitempty"`
+}
+
 // Config represents the configuration file
 type Config struct {
+	// Filter determines which resources to include/exclude from processing
+	Filter *Filter `yaml:"filter,omitempty"`
 	// Global rules applied to all resources
 	Global *GlobalRules `yaml:"global,omitempty"`
 	// Rules for transforming resources
@@ -60,6 +73,8 @@ type Rule struct {
 	Wrap *Wrap `yaml:"wrap,omitempty"`
 	// ReplaceWith replaces the field at path with raw content
 	ReplaceWith string `yaml:"replaceWith,omitempty"`
+	// AppendWith appends raw content to the end of an array at path
+	AppendWith string `yaml:"appendWith,omitempty"`
 	// InjectRaw injects raw content at the path
 	InjectRaw *InjectRaw `yaml:"injectRaw,omitempty"`
 }
@@ -68,8 +83,8 @@ type Rule struct {
 type Match struct {
 	// Kinds of Kubernetes resources to match (e.g., [Deployment, Service])
 	Kinds []string `yaml:"kinds,omitempty"`
-	// Name of the resource (supports * wildcard)
-	Name string `yaml:"name,omitempty"`
+	// Names of the resources to match (supports * wildcard, matches if ANY pattern matches)
+	Names []string `yaml:"names,omitempty"`
 	// Labels to match (all must match)
 	Labels map[string]string `yaml:"labels,omitempty"`
 }
@@ -84,6 +99,8 @@ type Change struct {
 	Action string `yaml:"action,omitempty"`
 	// ReplaceWith replaces the field with raw content
 	ReplaceWith string `yaml:"replaceWith,omitempty"`
+	// AppendWith appends raw content to the end of an array at path
+	AppendWith string `yaml:"appendWith,omitempty"`
 	// WrapValue wraps the field value with conditions
 	WrapValue *WrapValue `yaml:"wrapValue,omitempty"`
 }

@@ -1,163 +1,106 @@
 package transform
 
 import (
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestParseDocuments_SingleDocument(t *testing.T) {
 	input := []byte("apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: test")
 	docs, err := ParseDocuments(input)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(docs) != 1 {
-		t.Errorf("expected 1 document, got %d", len(docs))
-	}
+	require.NoError(t, err)
+	require.Len(t, docs, 1)
 }
 
 func TestParseDocuments_MultipleDocuments(t *testing.T) {
 	input := []byte("kind: ConfigMap\nmetadata:\n  name: a\n---\nkind: Service\nmetadata:\n  name: b")
 	docs, err := ParseDocuments(input)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(docs) != 2 {
-		t.Errorf("expected 2 documents, got %d", len(docs))
-	}
+	require.NoError(t, err)
+	require.Len(t, docs, 2)
 }
 
 func TestParseDocuments_EmptyInput(t *testing.T) {
 	docs, err := ParseDocuments([]byte(""))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(docs) != 0 {
-		t.Errorf("expected 0 documents, got %d", len(docs))
-	}
+	require.NoError(t, err)
+	require.Len(t, docs, 0)
 }
 
 func TestParseDocuments_InvalidYAML(t *testing.T) {
 	input := []byte(":\n  :\n    - [invalid")
 	_, err := ParseDocuments(input)
-	if err == nil {
-		t.Error("expected error for invalid YAML")
-	}
+	require.Error(t, err)
 }
 
 func TestGetKind(t *testing.T) {
 	docs, _ := ParseDocuments([]byte("kind: Deployment\nmetadata:\n  name: test"))
-	if len(docs) == 0 {
-		t.Fatal("expected at least 1 document")
-	}
-	if kind := docs[0].GetKind(); kind != "Deployment" {
-		t.Errorf("expected Deployment, got %s", kind)
-	}
+	require.NotEmpty(t, docs, "expected at least 1 document")
+	require.Equal(t, kindDeployment, docs[0].GetKind())
 }
 
 func TestGetKind_NoKind(t *testing.T) {
 	docs, _ := ParseDocuments([]byte("apiVersion: v1\nmetadata:\n  name: test"))
-	if len(docs) == 0 {
-		t.Fatal("expected at least 1 document")
-	}
-	if kind := docs[0].GetKind(); kind != "" {
-		t.Errorf("expected empty string, got %s", kind)
-	}
+	require.NotEmpty(t, docs, "expected at least 1 document")
+	require.Equal(t, "", docs[0].GetKind())
 }
 
 func TestGetName(t *testing.T) {
 	docs, _ := ParseDocuments([]byte("kind: ConfigMap\nmetadata:\n  name: my-config"))
-	if len(docs) == 0 {
-		t.Fatal("expected at least 1 document")
-	}
-	if name := docs[0].GetName(); name != "my-config" {
-		t.Errorf("expected my-config, got %s", name)
-	}
+	require.NotEmpty(t, docs, "expected at least 1 document")
+	require.Equal(t, "my-config", docs[0].GetName())
 }
 
 func TestGetName_NoMetadata(t *testing.T) {
 	docs, _ := ParseDocuments([]byte("kind: ConfigMap\ndata:\n  key: value"))
-	if len(docs) == 0 {
-		t.Fatal("expected at least 1 document")
-	}
-	if name := docs[0].GetName(); name != "" {
-		t.Errorf("expected empty string, got %s", name)
-	}
+	require.NotEmpty(t, docs, "expected at least 1 document")
+	require.Equal(t, "", docs[0].GetName())
 }
 
 func TestGetLabels(t *testing.T) {
 	docs, _ := ParseDocuments([]byte("metadata:\n  labels:\n    app: myapp\n    version: v1"))
-	if len(docs) == 0 {
-		t.Fatal("expected at least 1 document")
-	}
+	require.NotEmpty(t, docs, "expected at least 1 document")
 	labels := docs[0].GetLabels()
-	if labels == nil {
-		t.Fatal("expected labels, got nil")
-	}
-	if labels["app"] != "myapp" {
-		t.Errorf("expected app=myapp, got %s", labels["app"])
-	}
-	if labels["version"] != "v1" {
-		t.Errorf("expected version=v1, got %s", labels["version"])
-	}
+	require.NotNil(t, labels)
+	require.Equal(t, "myapp", labels["app"])
+	require.Equal(t, "v1", labels["version"])
 }
 
 func TestGetLabels_NoLabels(t *testing.T) {
 	docs, _ := ParseDocuments([]byte("metadata:\n  name: test"))
-	if len(docs) == 0 {
-		t.Fatal("expected at least 1 document")
-	}
-	if labels := docs[0].GetLabels(); labels != nil {
-		t.Errorf("expected nil, got %v", labels)
-	}
+	require.NotEmpty(t, docs, "expected at least 1 document")
+	require.Nil(t, docs[0].GetLabels())
 }
 
 func TestUnquoteHelmTemplates_DoubleQuotes(t *testing.T) {
 	input := `namespace: "{{ .Release.Namespace }}"`
 	result := unquoteHelmTemplates(input)
 	expected := `namespace: {{ .Release.Namespace }}`
-	if result != expected {
-		t.Errorf("expected %q, got %q", expected, result)
-	}
+	require.Equal(t, expected, result)
 }
 
 func TestUnquoteHelmTemplates_SingleQuotes(t *testing.T) {
 	input := `namespace: '{{ .Release.Namespace }}'`
 	result := unquoteHelmTemplates(input)
 	expected := `namespace: {{ .Release.Namespace }}`
-	if result != expected {
-		t.Errorf("expected %q, got %q", expected, result)
-	}
+	require.Equal(t, expected, result)
 }
 
 func TestUnquoteHelmTemplates_NoTemplates(t *testing.T) {
 	input := `name: "regular-value"`
 	result := unquoteHelmTemplates(input)
 	// Should not modify lines without {{ }}
-	if result != input {
-		t.Errorf("expected unchanged, got %q", result)
-	}
+	require.Equal(t, input, result)
 }
 
 func TestSerialize_RoundTrip(t *testing.T) {
 	input := "kind: ConfigMap\nmetadata:\n  name: test\ndata:\n  key: value"
 	docs, err := ParseDocuments([]byte(input))
-	if err != nil {
-		t.Fatalf("parse error: %v", err)
-	}
-	if len(docs) == 0 {
-		t.Fatal("expected at least 1 document")
-	}
+	require.NoError(t, err)
+	require.NotEmpty(t, docs, "expected at least 1 document")
 
 	output, err := docs[0].Serialize()
-	if err != nil {
-		t.Fatalf("serialize error: %v", err)
-	}
+	require.NoError(t, err)
 
-	if !strings.Contains(output, "kind: ConfigMap") {
-		t.Errorf("expected output to contain 'kind: ConfigMap'\nGot:\n%s", output)
-	}
-	if !strings.Contains(output, "name: test") {
-		t.Errorf("expected output to contain 'name: test'\nGot:\n%s", output)
-	}
+	require.Contains(t, output, "kind: ConfigMap")
+	require.Contains(t, output, "name: test")
 }

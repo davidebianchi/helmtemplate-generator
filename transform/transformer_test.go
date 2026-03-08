@@ -5,6 +5,14 @@ import (
 	"testing"
 
 	"github.com/davidebianchi/helmtemplate-generator/config"
+	"github.com/stretchr/testify/require"
+)
+
+const (
+	kindDeployment = "Deployment"
+	kindConfigMap  = "ConfigMap"
+	kindService    = "Service"
+	nameAppA       = "app-a"
 )
 
 func TestTransform_SimpleReplacement(t *testing.T) {
@@ -27,13 +35,9 @@ data:
 
 	transformer := New(cfg)
 	output, err := transformer.Transform([]byte(input))
-	if err != nil {
-		t.Fatalf("Transform failed: %v", err)
-	}
+	require.NoError(t, err)
 
-	if !strings.Contains(output, `namespace: {{ .Release.Namespace }}`) {
-		t.Errorf("Expected namespace to be replaced with template\nGot:\n%s", output)
-	}
+	require.Contains(t, output, `namespace: {{ .Release.Namespace }}`)
 }
 
 func TestTransform_GlobalDelete(t *testing.T) {
@@ -55,16 +59,10 @@ status:
 
 	transformer := New(cfg)
 	output, err := transformer.Transform([]byte(input))
-	if err != nil {
-		t.Fatalf("Transform failed: %v", err)
-	}
+	require.NoError(t, err)
 
-	if strings.Contains(output, "uid:") {
-		t.Errorf("Expected uid to be deleted\nGot:\n%s", output)
-	}
-	if strings.Contains(output, "status:") {
-		t.Errorf("Expected status to be deleted\nGot:\n%s", output)
-	}
+	require.NotContains(t, output, "uid:")
+	require.NotContains(t, output, "status:")
 }
 
 func TestTransform_MatchKind(t *testing.T) {
@@ -87,13 +85,9 @@ spec:
 
 	transformer := New(cfg)
 	output, err := transformer.Transform([]byte(input))
-	if err != nil {
-		t.Fatalf("Transform failed: %v", err)
-	}
+	require.NoError(t, err)
 
-	if !strings.Contains(output, `replicas: {{ .Values.replicas }}`) {
-		t.Errorf("Expected replicas to be replaced with template\nGot:\n%s", output)
-	}
+	require.Contains(t, output, `replicas: {{ .Values.replicas }}`)
 }
 
 func TestTransform_MatchKindNoMatch(t *testing.T) {
@@ -116,14 +110,10 @@ data:
 
 	transformer := New(cfg)
 	output, err := transformer.Transform([]byte(input))
-	if err != nil {
-		t.Fatalf("Transform failed: %v", err)
-	}
+	require.NoError(t, err)
 
 	// Should not modify ConfigMap since rule matches only Deployment
-	if strings.Contains(output, `{{ .Values.replicas }}`) {
-		t.Errorf("Expected ConfigMap to be unchanged\nGot:\n%s", output)
-	}
+	require.NotContains(t, output, `{{ .Values.replicas }}`)
 }
 
 func TestTransform_DocumentWrap(t *testing.T) {
@@ -148,16 +138,18 @@ spec:
 
 	transformer := New(cfg)
 	output, err := transformer.Transform([]byte(input))
-	if err != nil {
-		t.Fatalf("Transform failed: %v", err)
-	}
+	require.NoError(t, err)
 
-	if !strings.HasPrefix(output, "{{- if .Values.enabled }}") {
-		t.Errorf("Expected output to start with if condition\nGot:\n%s", output)
-	}
-	if !strings.HasSuffix(strings.TrimSpace(output), "{{- end }}") {
-		t.Errorf("Expected output to end with end\nGot:\n%s", output)
-	}
+	require.True(t,
+		strings.HasPrefix(output, "{{- if .Values.enabled }}"),
+		"Expected to start with if condition\nGot:\n%s",
+		output,
+	)
+	require.True(t,
+		strings.HasSuffix(strings.TrimSpace(output), "{{- end }}"),
+		"Expected to end with end\nGot:\n%s",
+		output,
+	)
 }
 
 func TestTransform_MultipleChanges(t *testing.T) {
@@ -189,16 +181,10 @@ spec:
 
 	transformer := New(cfg)
 	output, err := transformer.Transform([]byte(input))
-	if err != nil {
-		t.Fatalf("Transform failed: %v", err)
-	}
+	require.NoError(t, err)
 
-	if !strings.Contains(output, `replicas: {{ .Values.replicas }}`) {
-		t.Errorf("Expected replicas to be replaced\nGot:\n%s", output)
-	}
-	if !strings.Contains(output, `namespace: {{ .Release.Namespace }}`) {
-		t.Errorf("Expected namespace to be replaced\nGot:\n%s", output)
-	}
+	require.Contains(t, output, `replicas: {{ .Values.replicas }}`)
+	require.Contains(t, output, `namespace: {{ .Release.Namespace }}`)
 }
 
 func TestTransform_MultiDocument(t *testing.T) {
@@ -225,21 +211,15 @@ metadata:
 
 	transformer := New(cfg)
 	output, err := transformer.Transform([]byte(input))
-	if err != nil {
-		t.Fatalf("Transform failed: %v", err)
-	}
+	require.NoError(t, err)
 
 	// Should have two documents separated by ---
 	docs := strings.Split(output, "---")
-	if len(docs) != 2 {
-		t.Errorf("Expected 2 documents, got %d\nOutput:\n%s", len(docs), output)
-	}
+	require.Len(t, docs, 2)
 
 	// Both should have the namespace replaced
 	count := strings.Count(output, `{{ .Release.Namespace }}`)
-	if count != 2 {
-		t.Errorf("Expected 2 namespace replacements, got %d\nOutput:\n%s", count, output)
-	}
+	require.Equal(t, 2, count, "Expected 2 namespace replacements\nOutput:\n%s", output)
 }
 
 func TestTransform_MatchNameWildcard(t *testing.T) {
@@ -248,7 +228,7 @@ func TestTransform_MatchNameWildcard(t *testing.T) {
 			{
 				Match: &config.Match{
 					Kinds: []string{"Deployment"},
-					Name:  "my-*",
+					Names: []string{"my-*"},
 				},
 				Path:  ".spec.replicas",
 				Value: `{{ .Values.replicas }}`,
@@ -272,15 +252,11 @@ spec:
 
 	transformer := New(cfg)
 	output, err := transformer.Transform([]byte(input))
-	if err != nil {
-		t.Fatalf("Transform failed: %v", err)
-	}
+	require.NoError(t, err)
 
 	// Only first deployment should have replicas replaced
 	count := strings.Count(output, `{{ .Values.replicas }}`)
-	if count != 1 {
-		t.Errorf("Expected 1 replacement (only my-*), got %d\nOutput:\n%s", count, output)
-	}
+	require.Equal(t, 1, count, "Expected 1 replacement (only my-*)\nOutput:\n%s", output)
 }
 
 func TestTransform_ReplaceWith(t *testing.T) {
@@ -309,16 +285,10 @@ spec:
 
 	transformer := New(cfg)
 	output, err := transformer.Transform([]byte(input))
-	if err != nil {
-		t.Fatalf("Transform failed: %v", err)
-	}
+	require.NoError(t, err)
 
-	if !strings.Contains(output, "{{- with .Values.imagePullSecrets }}") {
-		t.Errorf("Expected replaceWith content in output\nGot:\n%s", output)
-	}
-	if strings.Contains(output, "my-secret") {
-		t.Errorf("Expected original value to be replaced\nGot:\n%s", output)
-	}
+	require.Contains(t, output, "{{- with .Values.imagePullSecrets }}")
+	require.NotContains(t, output, "my-secret")
 }
 
 func TestTransform_UnknownAction(t *testing.T) {
@@ -337,12 +307,8 @@ metadata:
 
 	transformer := New(cfg)
 	_, err := transformer.Transform([]byte(input))
-	if err == nil {
-		t.Error("expected error for unknown action")
-	}
-	if !strings.Contains(err.Error(), "unknown action") {
-		t.Errorf("expected 'unknown action' in error, got: %v", err)
-	}
+	require.Error(t, err)
+	require.ErrorContains(t, err, "unknown action")
 }
 
 func TestTransform_NilConfig(t *testing.T) {
@@ -354,12 +320,8 @@ data:
   key: value`
 
 	output, err := transformer.Transform([]byte(input))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !strings.Contains(output, "name: test") {
-		t.Errorf("expected pass-through output\nGot:\n%s", output)
-	}
+	require.NoError(t, err)
+	require.Contains(t, output, "name: test")
 }
 
 func TestTransformDocuments(t *testing.T) {
@@ -388,20 +350,142 @@ spec:
 
 	transformer := New(cfg)
 	docs, err := transformer.TransformDocuments([]byte(input))
-	if err != nil {
-		t.Fatalf("TransformDocuments failed: %v", err)
+	require.NoError(t, err)
+
+	require.Len(t, docs, 2)
+
+	require.Equal(t, kindConfigMap, docs[0].Kind)
+	require.Equal(t, "config1", docs[0].Name)
+	require.Equal(t, kindDeployment, docs[1].Kind)
+	require.Equal(t, "my-deploy", docs[1].Name)
+}
+
+func TestTransform_FilterIncludeKind(t *testing.T) {
+	cfg := &config.Config{
+		Filter: &config.Filter{
+			Include: []config.Match{
+				{Kinds: []string{kindDeployment}, Names: []string{"my-deploy"}},
+			},
+		},
+		Rules: []config.Rule{
+			{
+				Path:  ".metadata.namespace",
+				Value: `{{ .Release.Namespace }}`,
+			},
+		},
 	}
 
-	if len(docs) != 2 {
-		t.Fatalf("expected 2 documents, got %d", len(docs))
+	input := `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-config
+  namespace: default
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-deploy
+  namespace: default
+spec:
+  replicas: 1
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: other-deploy
+  namespace: default
+spec:
+  replicas: 1`
+
+	transformer := New(cfg)
+	output, err := transformer.Transform([]byte(input))
+	require.NoError(t, err)
+
+	// ConfigMap should pass through (kind not in include filter)
+	require.Contains(t, output, kindConfigMap)
+	// my-deploy should be included
+	require.Contains(t, output, "my-deploy")
+	// other-deploy should be excluded (kind is scoped, doesn't match name)
+	require.NotContains(t, output, "other-deploy")
+	// Rules should be applied to remaining docs
+	count := strings.Count(output, `{{ .Release.Namespace }}`)
+	require.Equal(t, 2, count, "Expected 2 namespace replacements (ConfigMap + my-deploy)\nOutput:\n%s", output)
+}
+
+func TestTransform_FilterExcludeKind(t *testing.T) {
+	cfg := &config.Config{
+		Filter: &config.Filter{
+			Exclude: []config.Match{
+				{Kinds: []string{kindConfigMap}},
+			},
+		},
+		Rules: []config.Rule{
+			{
+				Path:  ".metadata.namespace",
+				Value: `{{ .Release.Namespace }}`,
+			},
+		},
 	}
 
-	if docs[0].Kind != "ConfigMap" || docs[0].Name != "config1" {
-		t.Errorf("doc 0: expected ConfigMap/config1, got %s/%s", docs[0].Kind, docs[0].Name)
+	input := `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-config
+  namespace: default
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-deploy
+  namespace: default
+spec:
+  replicas: 1`
+
+	transformer := New(cfg)
+	output, err := transformer.Transform([]byte(input))
+	require.NoError(t, err)
+
+	require.NotContains(t, output, kindConfigMap)
+	require.Contains(t, output, kindDeployment)
+}
+
+func TestTransformDocuments_FilterIncludeAndExclude(t *testing.T) {
+	cfg := &config.Config{
+		Filter: &config.Filter{
+			Include: []config.Match{
+				{Kinds: []string{kindDeployment}, Names: []string{"app-*"}},
+			},
+			Exclude: []config.Match{
+				{Kinds: []string{kindDeployment}, Names: []string{"app-b"}},
+			},
+		},
 	}
-	if docs[1].Kind != "Deployment" || docs[1].Name != "my-deploy" {
-		t.Errorf("doc 1: expected Deployment/my-deploy, got %s/%s", docs[1].Kind, docs[1].Name)
-	}
+
+	input := `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-a
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-b
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-svc`
+
+	transformer := New(cfg)
+	docs, err := transformer.TransformDocuments([]byte(input))
+	require.NoError(t, err)
+
+	// app-a matches include, app-b matches exclude, Service passes through
+	require.Len(t, docs, 2, "expected 2 documents (app-a + Service)")
+	require.Equal(t, kindDeployment, docs[0].Kind)
+	require.Equal(t, nameAppA, docs[0].Name)
+	require.Equal(t, kindService, docs[1].Kind)
+	require.Equal(t, "my-svc", docs[1].Name)
 }
 
 func TestTransform_DeleteAction(t *testing.T) {
@@ -425,11 +509,164 @@ data:
 
 	transformer := New(cfg)
 	output, err := transformer.Transform([]byte(input))
-	if err != nil {
-		t.Fatalf("Transform failed: %v", err)
+	require.NoError(t, err)
+
+	require.NotContains(t, output, "annotations:")
+}
+
+func TestTransform_AppendWith(t *testing.T) {
+	cfg := &config.Config{
+		Rules: []config.Rule{
+			{
+				Match:      &config.Match{Kinds: []string{kindDeployment}},
+				Path:       ".spec.template.spec.containers[0].env",
+				AppendWith: `{{- include "myapp.extraEnv" . | nindent 12 }}`,
+			},
+		},
 	}
 
-	if strings.Contains(output, "annotations:") {
-		t.Errorf("Expected annotations to be deleted\nGot:\n%s", output)
+	input := `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-deployment
+spec:
+  template:
+    spec:
+      containers:
+        - name: my-container
+          env:
+            - name: FOO
+              value: bar`
+
+	transformer := New(cfg)
+	output, err := transformer.Transform([]byte(input))
+	require.NoError(t, err)
+
+	// Should preserve existing env var
+	require.Contains(t, output, "name: FOO")
+	require.Contains(t, output, "value: bar")
+	// Should contain appended content
+	require.Contains(t, output, `{{- include "myapp.extraEnv" . | nindent 12 }}`)
+}
+
+func TestTransform_AppendWith_PreservesExistingElements(t *testing.T) {
+	cfg := &config.Config{
+		Rules: []config.Rule{
+			{
+				Match:      &config.Match{Kinds: []string{kindDeployment}},
+				Path:       ".spec.template.spec.containers[0].env",
+				AppendWith: `{{- include "myapp.extraEnv" . | nindent 12 }}`,
+			},
+		},
 	}
+
+	input := `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-deployment
+spec:
+  template:
+    spec:
+      containers:
+        - name: my-container
+          env:
+            - name: FOO
+              value: bar
+            - name: BAZ
+              value: qux`
+
+	transformer := New(cfg)
+	output, err := transformer.Transform([]byte(input))
+	require.NoError(t, err)
+
+	// Both existing env vars should be preserved
+	require.Contains(t, output, "name: FOO")
+	require.Contains(t, output, "name: BAZ")
+	// Appended content should follow
+	require.Contains(t, output, `{{- include "myapp.extraEnv" . | nindent 12 }}`)
+}
+
+func TestTransform_AppendWith_NoMatch(t *testing.T) {
+	cfg := &config.Config{
+		Rules: []config.Rule{
+			{
+				Match:      &config.Match{Kinds: []string{kindDeployment}},
+				Path:       ".spec.template.spec.containers[0].env",
+				AppendWith: `{{- include "myapp.extraEnv" . | nindent 12 }}`,
+			},
+		},
+	}
+
+	input := `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-config
+data:
+  key: value`
+
+	transformer := New(cfg)
+	output, err := transformer.Transform([]byte(input))
+	require.NoError(t, err)
+
+	// Should not contain the appended content since it's a ConfigMap
+	require.NotContains(t, output, "extraEnv")
+}
+
+func TestTransform_AppendWith_InChanges(t *testing.T) {
+	cfg := &config.Config{
+		Rules: []config.Rule{
+			{
+				Match: &config.Match{Kinds: []string{kindDeployment}},
+				Changes: []config.Change{
+					{
+						Path:       ".spec.template.spec.containers[0].env",
+						AppendWith: `{{- include "myapp.extraEnv" . | nindent 12 }}`,
+					},
+				},
+			},
+		},
+	}
+
+	input := `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-deployment
+spec:
+  template:
+    spec:
+      containers:
+        - name: my-container
+          env:
+            - name: FOO
+              value: bar`
+
+	transformer := New(cfg)
+	output, err := transformer.Transform([]byte(input))
+	require.NoError(t, err)
+
+	require.Contains(t, output, "name: FOO")
+	require.Contains(t, output, `{{- include "myapp.extraEnv" . | nindent 12 }}`)
+}
+
+func TestTransform_AppendWith_NonSequenceError(t *testing.T) {
+	cfg := &config.Config{
+		Rules: []config.Rule{
+			{
+				Path:       ".metadata.name",
+				AppendWith: "some content",
+			},
+		},
+	}
+
+	input := `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-config
+data:
+  key: value`
+
+	transformer := New(cfg)
+	_, err := transformer.Transform([]byte(input))
+	require.Error(t, err)
+	require.ErrorContains(t, err, "sequence")
 }
