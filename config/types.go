@@ -83,6 +83,8 @@ type Rule struct {
 type Match struct {
 	// Kinds of Kubernetes resources to match (e.g., [Deployment, Service])
 	Kinds []string `yaml:"kinds,omitempty"`
+	// ExcludeKinds of Kubernetes resources to exclude from matching (e.g., [Job, CronJob])
+	ExcludeKinds []string `yaml:"excludeKinds,omitempty"`
 	// Names of the resources to match (supports * wildcard, matches if ANY pattern matches)
 	Names []string `yaml:"names,omitempty"`
 	// Labels to match (all must match)

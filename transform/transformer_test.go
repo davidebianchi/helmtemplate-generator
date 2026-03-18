@@ -648,6 +648,83 @@ spec:
 	require.Contains(t, output, `{{- include "myapp.extraEnv" . | nindent 12 }}`)
 }
 
+func TestTransform_AddMapKey_NewAnnotation(t *testing.T) {
+	cfg := &config.Config{
+		Rules: []config.Rule{
+			{
+				Path:  ".metadata.annotations.my-annotation",
+				Value: "keep",
+			},
+		},
+	}
+
+	input := `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-config
+data:
+  key: value`
+
+	transformer := New(cfg)
+	output, err := transformer.Transform([]byte(input))
+	require.NoError(t, err)
+
+	require.Contains(t, output, "annotations:")
+	require.Contains(t, output, "my-annotation: keep")
+}
+
+func TestTransform_AddMapKey_ExistingAnnotations(t *testing.T) {
+	cfg := &config.Config{
+		Rules: []config.Rule{
+			{
+				Path:  ".metadata.annotations.new-annotation",
+				Value: `{{ .Values.myAnnotation }}`,
+			},
+		},
+	}
+
+	input := `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-config
+  annotations:
+    existing: value
+data:
+  key: value`
+
+	transformer := New(cfg)
+	output, err := transformer.Transform([]byte(input))
+	require.NoError(t, err)
+
+	require.Contains(t, output, "existing: value")
+	require.Contains(t, output, "new-annotation: {{ .Values.myAnnotation }}")
+}
+
+func TestTransform_AddMapKey_QuotedDottedKey(t *testing.T) {
+	cfg := &config.Config{
+		Rules: []config.Rule{
+			{
+				Path:  `.metadata.annotations["helm.sh/resource-policy"]`,
+				Value: "keep",
+			},
+		},
+	}
+
+	input := `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-config
+data:
+  key: value`
+
+	transformer := New(cfg)
+	output, err := transformer.Transform([]byte(input))
+	require.NoError(t, err)
+
+	require.Contains(t, output, "annotations:")
+	require.Contains(t, output, "helm.sh/resource-policy: keep")
+}
+
 func TestTransform_AppendWith_NonSequenceError(t *testing.T) {
 	cfg := &config.Config{
 		Rules: []config.Rule{

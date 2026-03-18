@@ -38,6 +38,27 @@ func TestMatchesDocument_MultipleKinds(t *testing.T) {
 	require.True(t, MatchesDocument(doc, match), "expected Service to match [Deployment, Service]")
 }
 
+func TestMatchesDocument_ExcludeKinds(t *testing.T) {
+	doc := docFromYAML(t, "kind: Job\nmetadata:\n  name: test")
+	match := &config.Match{ExcludeKinds: []string{"Job", "CronJob"}}
+	require.False(t, MatchesDocument(doc, match), "expected Job to be excluded")
+}
+
+func TestMatchesDocument_ExcludeKindsNoMatch(t *testing.T) {
+	doc := docFromYAML(t, "kind: Deployment\nmetadata:\n  name: test")
+	match := &config.Match{ExcludeKinds: []string{"Job", "CronJob"}}
+	require.True(t, MatchesDocument(doc, match), "expected Deployment not to be excluded")
+}
+
+func TestMatchesDocument_ExcludeKindsWithKinds(t *testing.T) {
+	doc := docFromYAML(t, "kind: Deployment\nmetadata:\n  name: test")
+	match := &config.Match{Kinds: []string{"Deployment", "Job"}, ExcludeKinds: []string{"Job"}}
+	require.True(t, MatchesDocument(doc, match), "expected Deployment to match kinds and not be excluded")
+
+	doc2 := docFromYAML(t, "kind: Job\nmetadata:\n  name: test")
+	require.False(t, MatchesDocument(doc2, match), "expected Job to be excluded even though it's in kinds")
+}
+
 func TestMatchesDocument_NameWildcard(t *testing.T) {
 	doc := docFromYAML(t, "kind: Deployment\nmetadata:\n  name: my-deployment")
 	match := &config.Match{Names: []string{"my-*"}}

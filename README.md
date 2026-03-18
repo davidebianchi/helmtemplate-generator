@@ -112,6 +112,9 @@ rules:
       kinds:
         - Deployment
         - StatefulSet
+      excludeKinds:            # Exclude specific kinds (takes precedence over kinds)
+        - Job
+        - CronJob
       names:                   # Wildcard name matching (matches ANY)
         - "my-*"
       labels:                  # All labels must match
@@ -120,11 +123,37 @@ rules:
 
 #### Setting values
 
+Replace a field's value with a Helm template expression.
+
+Config:
 ```yaml
 rules:
   - path: .metadata.namespace
     value: '{{ .Release.Namespace }}'
+```
 
+<details>
+<summary>Before / After</summary>
+
+Before:
+```yaml
+metadata:
+  name: my-config
+  namespace: default
+```
+
+After:
+```yaml
+metadata:
+  name: my-config
+  namespace: {{ .Release.Namespace }}
+```
+</details>
+
+You can group multiple changes in a single rule:
+
+```yaml
+rules:
   - match:
       kinds:
         - Deployment
@@ -135,16 +164,128 @@ rules:
         value: '{{ .Values.image.repository }}:{{ .Values.image.tag }}'
 ```
 
+#### Adding map keys
+
+Set a value at a path that doesn't exist yet. Intermediate mapping nodes are created automatically. This is useful for adding annotations, labels, or any new map entries.
+
+Config:
+```yaml
+rules:
+  - path: .metadata.annotations.my-annotation
+    value: '{{ .Values.myAnnotation }}'
+```
+
+<details>
+<summary>Before / After</summary>
+
+Before:
+```yaml
+metadata:
+  name: my-config
+```
+
+After:
+```yaml
+metadata:
+  name: my-config
+  annotations:
+    my-annotation: {{ .Values.myAnnotation }}
+```
+</details>
+
+For keys containing dots (e.g., Kubernetes annotations), use the quoted bracket syntax `["key"]`:
+
+Config:
+```yaml
+rules:
+  - path: '.metadata.annotations["helm.sh/resource-policy"]'
+    value: keep
+```
+
+<details>
+<summary>Before / After</summary>
+
+Before:
+```yaml
+metadata:
+  name: my-config
+```
+
+After:
+```yaml
+metadata:
+  name: my-config
+  annotations:
+    helm.sh/resource-policy: keep
+```
+</details>
+
+If the map already exists, the new key is appended:
+
+Config:
+```yaml
+rules:
+  - path: .metadata.annotations.new-key
+    value: new-value
+```
+
+<details>
+<summary>Before / After</summary>
+
+Before:
+```yaml
+metadata:
+  name: my-config
+  annotations:
+    existing: value
+```
+
+After:
+```yaml
+metadata:
+  name: my-config
+  annotations:
+    existing: value
+    new-key: new-value
+```
+</details>
+
 #### Deleting fields
 
+Config:
 ```yaml
 rules:
   - path: .metadata.annotations
     action: delete
 ```
 
+<details>
+<summary>Before / After</summary>
+
+Before:
+```yaml
+metadata:
+  name: my-config
+  annotations:
+    key: value
+data:
+  foo: bar
+```
+
+After:
+```yaml
+metadata:
+  name: my-config
+data:
+  foo: bar
+```
+</details>
+
 #### Wrapping resources with conditionals
 
+Wrap an entire resource with Helm conditionals.
+
+Config:
 ```yaml
 rules:
   - match:
@@ -155,8 +296,33 @@ rules:
       after: '{{- end }}'
 ```
 
+<details>
+<summary>Before / After</summary>
+
+Before:
+```yaml
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: my-crd
+```
+
+After:
+```yaml
+{{- if .Values.installCRDs }}
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: my-crd
+{{- end }}
+```
+</details>
+
 #### Replacing fields with raw Helm blocks
 
+Replace a field and its value with arbitrary Helm template content.
+
+Config:
 ```yaml
 rules:
   - match:
@@ -170,10 +336,39 @@ rules:
       {{- end }}
 ```
 
+<details>
+<summary>Before / After</summary>
+
+Before:
+```yaml
+spec:
+  template:
+    spec:
+      imagePullSecrets:
+        - name: my-secret
+      containers:
+        - name: app
+```
+
+After:
+```yaml
+spec:
+  template:
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: app
+```
+</details>
+
 #### Appending to arrays
 
 Append raw content after the last element of an existing YAML array. Unlike `replaceWith`, this preserves all existing array elements.
 
+Config:
 ```yaml
 rules:
   - match:
@@ -183,6 +378,29 @@ rules:
     appendWith: |
       {{- include "mychart.extraEnv" . | nindent 12 }}
 ```
+
+<details>
+<summary>Before / After</summary>
+
+Before:
+```yaml
+containers:
+  - name: app
+    env:
+      - name: FOO
+        value: bar
+```
+
+After:
+```yaml
+containers:
+  - name: app
+    env:
+      - name: FOO
+        value: bar
+      {{- include "mychart.extraEnv" . | nindent 12 }}
+```
+</details>
 
 ### `output`
 
@@ -220,6 +438,7 @@ Paths use a JSONPath-like dot notation:
 |--------|-------------|
 | `.metadata.name` | Access map keys |
 | `.spec.containers[0].image` | Access array elements by index |
+| `.metadata.annotations["helm.sh/resource-policy"]` | Access keys containing dots |
 
 ## Development
 

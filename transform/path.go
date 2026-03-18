@@ -19,6 +19,7 @@ type PathSegment struct {
 // Examples:
 //   - .metadata.name -> [{Key: "metadata"}, {Key: "name"}]
 //   - .spec.containers[0].image -> [{Key: "spec"}, {Key: "containers"}, {Index: 0}, {Key: "image"}]
+//   - .metadata.annotations["helm.sh/resource-policy"] -> [{Key: "metadata"}, {Key: "annotations"}, {Key: "helm.sh/resource-policy"}]
 func ParsePath(path string) ([]PathSegment, error) {
 	if path == "" {
 		return nil, nil
@@ -28,21 +29,24 @@ func ParsePath(path string) ([]PathSegment, error) {
 	path = strings.TrimPrefix(path, ".")
 
 	var segments []PathSegment
-	// Match either a key or an array index
-	re := regexp.MustCompile(`([^.\[\]]+)|\[(\d+)\]`)
+	// Match quoted key ["..."], array index [N], or unquoted key
+	re := regexp.MustCompile(`\["([^"]+)"\]|\[(\d+)\]|([^.\[\]]+)`)
 	matches := re.FindAllStringSubmatch(path, -1)
 
 	for _, match := range matches {
 		if match[1] != "" {
-			// Key segment
+			// Quoted key segment: ["key.with.dots"]
 			segments = append(segments, PathSegment{Key: match[1], Index: -1})
 		} else if match[2] != "" {
-			// Array index segment
+			// Array index segment: [0]
 			idx, err := strconv.Atoi(match[2])
 			if err != nil {
 				return nil, fmt.Errorf("invalid array index: %s", match[2])
 			}
 			segments = append(segments, PathSegment{Index: idx})
+		} else if match[3] != "" {
+			// Unquoted key segment
+			segments = append(segments, PathSegment{Key: match[3], Index: -1})
 		}
 	}
 
@@ -105,13 +109,15 @@ func GetNodeAtPath(root *yaml.Node, segments []PathSegment) (*yaml.Node, *yaml.N
 	return node, parent, indexInParent, nil
 }
 
-// SetValueAtPath sets a value at the given path
+// SetValueAtPath sets a value at the given path, creating intermediate mapping
+// nodes as needed. For example, setting ".metadata.annotations.newKey" will
+// create the "annotations" map if it doesn't exist.
 func SetValueAtPath(root *yaml.Node, segments []PathSegment, value string) error {
 	if len(segments) == 0 {
 		return fmt.Errorf("empty path")
 	}
 
-	// Navigate to parent
+	// Navigate to parent, creating intermediate maps as needed
 	parentSegments := segments[:len(segments)-1]
 	lastSeg := segments[len(segments)-1]
 
@@ -122,10 +128,9 @@ func SetValueAtPath(root *yaml.Node, segments []PathSegment, value string) error
 			parent = parent.Content[0]
 		}
 	} else {
-		var err error
-		parent, _, _, err = GetNodeAtPath(root, parentSegments)
-		if err != nil {
-			return fmt.Errorf("failed to navigate to parent: %w", err)
+		parent = navigateOrCreate(root, parentSegments)
+		if parent == nil {
+			return fmt.Errorf("failed to navigate to parent path")
 		}
 	}
 
@@ -160,6 +165,48 @@ func SetValueAtPath(root *yaml.Node, segments []PathSegment, value string) error
 	}
 
 	return nil
+}
+
+// navigateOrCreate traverses the YAML tree following the segments, creating
+// intermediate MappingNodes for missing keys.
+func navigateOrCreate(root *yaml.Node, segments []PathSegment) *yaml.Node {
+	node := root
+	if node.Kind == yaml.DocumentNode && len(node.Content) > 0 {
+		node = node.Content[0]
+	}
+
+	for _, seg := range segments {
+		if seg.Index >= 0 {
+			// Array access — cannot create intermediate arrays
+			if node.Kind != yaml.SequenceNode || seg.Index >= len(node.Content) {
+				return nil
+			}
+			node = node.Content[seg.Index]
+		} else {
+			if node.Kind != yaml.MappingNode {
+				return nil
+			}
+			found := false
+			for j := 0; j < len(node.Content); j += 2 {
+				if j+1 < len(node.Content) && node.Content[j].Value == seg.Key {
+					node = node.Content[j+1]
+					found = true
+					break
+				}
+			}
+			if !found {
+				// Create a new mapping node for the missing key
+				newMap := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+				node.Content = append(node.Content,
+					&yaml.Node{Kind: yaml.ScalarNode, Value: seg.Key, Tag: "!!str"},
+					newMap,
+				)
+				node = newMap
+			}
+		}
+	}
+
+	return node
 }
 
 // createScalarNode creates a YAML scalar node with the appropriate style

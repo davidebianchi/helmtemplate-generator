@@ -12,9 +12,17 @@ func MatchesDocument(doc *Document, match *config.Match) bool {
 		return true
 	}
 
+	docKind := doc.GetKind()
+
+	// Check excludeKinds (list)
+	for _, k := range match.ExcludeKinds {
+		if k == docKind {
+			return false
+		}
+	}
+
 	// Check kinds (list)
 	if len(match.Kinds) > 0 {
-		docKind := doc.GetKind()
 		found := false
 		for _, k := range match.Kinds {
 			if k == docKind {

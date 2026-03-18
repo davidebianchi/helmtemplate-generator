@@ -117,3 +117,64 @@ func TestGetNodeAtPath_ArrayOutOfBounds(t *testing.T) {
 	_, _, _, err := GetNodeAtPath(root, segments)
 	require.Error(t, err)
 }
+
+func TestParsePath_QuotedKey(t *testing.T) {
+	segments, err := ParsePath(`.metadata.annotations["helm.sh/resource-policy"]`)
+	require.NoError(t, err)
+	require.Len(t, segments, 3)
+	require.Equal(t, "metadata", segments[0].Key)
+	require.Equal(t, "annotations", segments[1].Key)
+	require.Equal(t, "helm.sh/resource-policy", segments[2].Key)
+}
+
+func TestSetValueAtPath_QuotedKeyWithDots(t *testing.T) {
+	root := parseYAML(t, "metadata:\n  annotations:\n    existing: value")
+	segments, _ := ParsePath(`.metadata.annotations["helm.sh/resource-policy"]`)
+
+	err := SetValueAtPath(root, segments, "keep")
+	require.NoError(t, err)
+
+	node, _, _, err := GetNodeAtPath(root, segments)
+	require.NoError(t, err)
+	require.NotNil(t, node)
+	require.Equal(t, "keep", node.Value)
+}
+
+func TestSetValueAtPath_QuotedKeyCreatesIntermediateMap(t *testing.T) {
+	root := parseYAML(t, "metadata:\n  name: test")
+	segments, _ := ParsePath(`.metadata.annotations["helm.sh/resource-policy"]`)
+
+	err := SetValueAtPath(root, segments, "keep")
+	require.NoError(t, err)
+
+	node, _, _, err := GetNodeAtPath(root, segments)
+	require.NoError(t, err)
+	require.NotNil(t, node)
+	require.Equal(t, "keep", node.Value)
+}
+
+func TestSetValueAtPath_CreatesIntermediateMap(t *testing.T) {
+	root := parseYAML(t, "metadata:\n  name: test")
+	segments, _ := ParsePath(".metadata.annotations.mykey")
+
+	err := SetValueAtPath(root, segments, "myvalue")
+	require.NoError(t, err)
+
+	node, _, _, err := GetNodeAtPath(root, segments)
+	require.NoError(t, err)
+	require.NotNil(t, node)
+	require.Equal(t, "myvalue", node.Value)
+}
+
+func TestSetValueAtPath_CreatesMultipleIntermediateMaps(t *testing.T) {
+	root := parseYAML(t, "metadata:\n  name: test")
+	segments, _ := ParsePath(".metadata.annotations.deep.nested")
+
+	err := SetValueAtPath(root, segments, "value")
+	require.NoError(t, err)
+
+	node, _, _, err := GetNodeAtPath(root, segments)
+	require.NoError(t, err)
+	require.NotNil(t, node)
+	require.Equal(t, "value", node.Value)
+}
