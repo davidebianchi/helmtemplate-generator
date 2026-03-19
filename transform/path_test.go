@@ -244,6 +244,27 @@ env:
 	require.Equal(t, "{{ .Values.databaseURL }}", node.Value)
 }
 
+func TestSetValueAtPath_FilterAsLastSegment_SetValue(t *testing.T) {
+	root := parseYAML(t, `
+env:
+  - name: FOO
+    value: bar
+  - name: TARGET_NS
+    value: old-value
+`)
+	segments, err := ParsePath(".env[name=TARGET_NS]")
+	require.NoError(t, err)
+
+	// Setting a value on a filter-matched element should replace the element
+	err = SetValueAtPath(root, segments, "replaced")
+	require.NoError(t, err)
+
+	envSegs, _ := ParsePath(".env")
+	envNode, _, _, _ := GetNodeAtPath(root, envSegs)
+	require.NotNil(t, envNode)
+	require.Equal(t, "replaced", envNode.Content[1].Value)
+}
+
 func TestSetValueAtPath_NullIntermediateValue(t *testing.T) {
 	root := parseYAML(t, "metadata:\n  annotations: null")
 	segments, _ := ParsePath(".metadata.annotations.mykey")

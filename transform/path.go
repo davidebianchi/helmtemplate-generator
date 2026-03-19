@@ -173,7 +173,17 @@ func SetValueAtPath(root *yaml.Node, segments []PathSegment, value string) error
 		}
 	}
 
-	if lastSeg.Index >= 0 {
+	if lastSeg.isFilter() {
+		// Array filter access: find matching element and replace it
+		if parent.Kind != yaml.SequenceNode {
+			return fmt.Errorf("expected sequence for filter [%s=%s], got node kind %d", lastSeg.FilterKey, lastSeg.FilterVal, parent.Kind)
+		}
+		found, idx := findInSequence(parent, lastSeg)
+		if found == nil {
+			return fmt.Errorf("no element with %s=%s found", lastSeg.FilterKey, lastSeg.FilterVal)
+		}
+		parent.Content[idx] = createScalarNode(value)
+	} else if lastSeg.Index >= 0 {
 		// Array element
 		if parent.Kind != yaml.SequenceNode {
 			return fmt.Errorf("expected sequence for array index at segment [%d], got node kind %d", lastSeg.Index, parent.Kind)
