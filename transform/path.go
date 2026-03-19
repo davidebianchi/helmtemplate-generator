@@ -176,16 +176,16 @@ func SetValueAtPath(root *yaml.Node, segments []PathSegment, value string) error
 	if lastSeg.Index >= 0 {
 		// Array element
 		if parent.Kind != yaml.SequenceNode {
-			return fmt.Errorf("expected sequence for array index")
+			return fmt.Errorf("expected sequence for array index at segment [%d], got node kind %d", lastSeg.Index, parent.Kind)
 		}
 		if lastSeg.Index >= len(parent.Content) {
-			return fmt.Errorf("index out of bounds")
+			return fmt.Errorf("index %d out of bounds (length %d)", lastSeg.Index, len(parent.Content))
 		}
 		parent.Content[lastSeg.Index] = createScalarNode(value)
 	} else {
 		// Map key
 		if parent.Kind != yaml.MappingNode {
-			return fmt.Errorf("expected mapping for key access")
+			return fmt.Errorf("expected mapping for key %q, got node kind %d (tag: %s, value: %q)", lastSeg.Key, parent.Kind, parent.Tag, parent.Value)
 		}
 
 		// Find existing key

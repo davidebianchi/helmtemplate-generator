@@ -120,14 +120,14 @@ func (t *Transformer) transformDocument(doc *Document) (string, error) {
 		// Single path/value change
 		if rule.Path != "" {
 			if err := t.applyPathChange(doc, &rule, &fieldReplacements); err != nil {
-				return "", err
+				return "", fmt.Errorf("rule path %s: %w", rule.Path, err)
 			}
 		}
 
 		// Multiple changes
 		for _, change := range rule.Changes {
 			if err := t.applyChange(doc, &change, &fieldReplacements); err != nil {
-				return "", err
+				return "", fmt.Errorf("change path %s: %w", change.Path, err)
 			}
 		}
 	}
