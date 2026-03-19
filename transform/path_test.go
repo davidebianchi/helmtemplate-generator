@@ -178,3 +178,90 @@ func TestSetValueAtPath_CreatesMultipleIntermediateMaps(t *testing.T) {
 	require.NotNil(t, node)
 	require.Equal(t, "value", node.Value)
 }
+
+func TestParsePath_KeyValueFilter(t *testing.T) {
+	segments, err := ParsePath(".spec.containers[0].env[name=FOO].value")
+	require.NoError(t, err)
+	require.Len(t, segments, 6)
+	require.Equal(t, "spec", segments[0].Key)
+	require.Equal(t, "containers", segments[1].Key)
+	require.Equal(t, 0, segments[2].Index)
+	require.Equal(t, "env", segments[3].Key)
+	require.Equal(t, "name", segments[4].FilterKey)
+	require.Equal(t, "FOO", segments[4].FilterVal)
+	require.Equal(t, -1, segments[4].Index)
+	require.Equal(t, "value", segments[5].Key)
+}
+
+func TestGetNodeAtPath_KeyValueFilter(t *testing.T) {
+	root := parseYAML(t, `
+env:
+  - name: FOO
+    value: bar
+  - name: BAZ
+    value: qux
+`)
+	segments, err := ParsePath(".env[name=BAZ].value")
+	require.NoError(t, err)
+
+	node, _, _, err := GetNodeAtPath(root, segments)
+	require.NoError(t, err)
+	require.NotNil(t, node)
+	require.Equal(t, "qux", node.Value)
+}
+
+func TestGetNodeAtPath_KeyValueFilter_NotFound(t *testing.T) {
+	root := parseYAML(t, `
+env:
+  - name: FOO
+    value: bar
+`)
+	segments, err := ParsePath(".env[name=MISSING].value")
+	require.NoError(t, err)
+
+	_, _, _, err = GetNodeAtPath(root, segments)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "no element with name=MISSING found")
+}
+
+func TestSetValueAtPath_KeyValueFilter(t *testing.T) {
+	root := parseYAML(t, `
+env:
+  - name: FOO
+    value: bar
+  - name: DATABASE_URL
+    value: postgres://localhost
+`)
+	segments, err := ParsePath(".env[name=DATABASE_URL].value")
+	require.NoError(t, err)
+
+	err = SetValueAtPath(root, segments, "{{ .Values.databaseURL }}")
+	require.NoError(t, err)
+
+	node, _, _, err := GetNodeAtPath(root, segments)
+	require.NoError(t, err)
+	require.NotNil(t, node)
+	require.Equal(t, "{{ .Values.databaseURL }}", node.Value)
+}
+
+func TestDeleteAtPath_KeyValueFilter(t *testing.T) {
+	root := parseYAML(t, `
+env:
+  - name: FOO
+    value: bar
+  - name: TO_DELETE
+    value: gone
+  - name: BAZ
+    value: qux
+`)
+	segments, err := ParsePath(".env[name=TO_DELETE]")
+	require.NoError(t, err)
+
+	err = DeleteAtPath(root, segments)
+	require.NoError(t, err)
+
+	envSegs, _ := ParsePath(".env")
+	node, _, _, _ := GetNodeAtPath(root, envSegs)
+	require.NotNil(t, node)
+	require.Len(t, node.Content, 2)
+}

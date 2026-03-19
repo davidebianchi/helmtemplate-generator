@@ -402,6 +402,57 @@ containers:
 ```
 </details>
 
+#### Filtering array elements by key
+
+Update a specific element in an array by matching a key-value pair, without needing to know its index. This is useful for targeting specific environment variables, containers, volumes, etc.
+
+Config:
+```yaml
+rules:
+  - match:
+      kinds:
+        - Deployment
+    path: .spec.template.spec.containers[0].env[name=DATABASE_URL].value
+    value: '{{ .Values.databaseURL }}'
+```
+
+<details>
+<summary>Before / After</summary>
+
+Before:
+```yaml
+containers:
+  - name: app
+    env:
+      - name: FOO
+        value: bar
+      - name: DATABASE_URL
+        value: postgres://localhost
+```
+
+After:
+```yaml
+containers:
+  - name: app
+    env:
+      - name: FOO
+        value: bar
+      - name: DATABASE_URL
+        value: {{ .Values.databaseURL }}
+```
+</details>
+
+You can also delete a specific array element by filter:
+
+```yaml
+rules:
+  - match:
+      kinds:
+        - Deployment
+    path: .spec.template.spec.containers[0].env[name=TO_REMOVE]
+    action: delete
+```
+
 ### `output`
 
 Controls how multi-document output is organized.
@@ -439,6 +490,7 @@ Paths use a JSONPath-like dot notation:
 | `.metadata.name` | Access map keys |
 | `.spec.containers[0].image` | Access array elements by index |
 | `.metadata.annotations["helm.sh/resource-policy"]` | Access keys containing dots |
+| `.spec.containers[0].env[name=FOO].value` | Filter array elements by key=value |
 
 ## Development
 

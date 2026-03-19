@@ -11,8 +11,10 @@ import (
 
 // PathSegment represents a segment in a YAML path
 type PathSegment struct {
-	Key   string // For map access
-	Index int    // For array access (-1 if not array)
+	Key        string // For map access
+	Index      int    // For array access (-1 if not array)
+	FilterKey  string // For array filter access: [key=value]
+	FilterVal  string // For array filter access: [key=value]
 }
 
 // ParsePath parses a JSONPath-like string into segments
@@ -29,28 +31,54 @@ func ParsePath(path string) ([]PathSegment, error) {
 	path = strings.TrimPrefix(path, ".")
 
 	var segments []PathSegment
-	// Match quoted key ["..."], array index [N], or unquoted key
-	re := regexp.MustCompile(`\["([^"]+)"\]|\[(\d+)\]|([^.\[\]]+)`)
+	// Match quoted key ["..."], key=value filter [key=value], array index [N], or unquoted key
+	re := regexp.MustCompile(`\["([^"]+)"\]|\[([^=\]]+)=([^\]]+)\]|\[(\d+)\]|([^.\[\]]+)`)
 	matches := re.FindAllStringSubmatch(path, -1)
 
 	for _, match := range matches {
 		if match[1] != "" {
 			// Quoted key segment: ["key.with.dots"]
 			segments = append(segments, PathSegment{Key: match[1], Index: -1})
-		} else if match[2] != "" {
+		} else if match[2] != "" && match[3] != "" {
+			// Key=value filter segment: [name=FOO]
+			segments = append(segments, PathSegment{Index: -1, FilterKey: match[2], FilterVal: match[3]})
+		} else if match[4] != "" {
 			// Array index segment: [0]
-			idx, err := strconv.Atoi(match[2])
+			idx, err := strconv.Atoi(match[4])
 			if err != nil {
-				return nil, fmt.Errorf("invalid array index: %s", match[2])
+				return nil, fmt.Errorf("invalid array index: %s", match[4])
 			}
 			segments = append(segments, PathSegment{Index: idx})
-		} else if match[3] != "" {
+		} else if match[5] != "" {
 			// Unquoted key segment
-			segments = append(segments, PathSegment{Key: match[3], Index: -1})
+			segments = append(segments, PathSegment{Key: match[5], Index: -1})
 		}
 	}
 
 	return segments, nil
+}
+
+// isFilter returns true if the segment uses key=value array filtering
+func (s PathSegment) isFilter() bool {
+	return s.FilterKey != ""
+}
+
+// findInSequence finds the first element in a SequenceNode where the child
+// map key FilterKey has value FilterVal. Returns the element and its index.
+func findInSequence(node *yaml.Node, seg PathSegment) (*yaml.Node, int) {
+	for i, elem := range node.Content {
+		if elem.Kind != yaml.MappingNode {
+			continue
+		}
+		for j := 0; j < len(elem.Content); j += 2 {
+			if j+1 < len(elem.Content) &&
+				elem.Content[j].Value == seg.FilterKey &&
+				elem.Content[j+1].Value == seg.FilterVal {
+				return elem, i
+			}
+		}
+	}
+	return nil, -1
 }
 
 // GetNodeAtPath traverses the YAML tree and returns the node at the given path
@@ -71,7 +99,18 @@ func GetNodeAtPath(root *yaml.Node, segments []PathSegment) (*yaml.Node, *yaml.N
 		parent = node
 		isLast := i == len(segments)-1
 
-		if seg.Index >= 0 {
+		if seg.isFilter() {
+			// Array filter access: [key=value]
+			if node.Kind != yaml.SequenceNode {
+				return nil, nil, -1, fmt.Errorf("expected sequence at path segment [%s=%s]", seg.FilterKey, seg.FilterVal)
+			}
+			found, idx := findInSequence(node, seg)
+			if found == nil {
+				return nil, nil, -1, fmt.Errorf("no element with %s=%s found", seg.FilterKey, seg.FilterVal)
+			}
+			indexInParent = idx
+			node = found
+		} else if seg.Index >= 0 {
 			// Array access
 			if node.Kind != yaml.SequenceNode {
 				return nil, nil, -1, fmt.Errorf("expected sequence at path segment [%d]", seg.Index)
@@ -176,7 +215,17 @@ func navigateOrCreate(root *yaml.Node, segments []PathSegment) *yaml.Node {
 	}
 
 	for _, seg := range segments {
-		if seg.Index >= 0 {
+		if seg.isFilter() {
+			// Array filter access — cannot create elements
+			if node.Kind != yaml.SequenceNode {
+				return nil
+			}
+			found, _ := findInSequence(node, seg)
+			if found == nil {
+				return nil
+			}
+			node = found
+		} else if seg.Index >= 0 {
 			// Array access — cannot create intermediate arrays
 			if node.Kind != yaml.SequenceNode || seg.Index >= len(node.Content) {
 				return nil
@@ -258,7 +307,17 @@ func DeleteAtPath(root *yaml.Node, segments []PathSegment) error {
 		return nil
 	}
 
-	if lastSeg.Index >= 0 {
+	if lastSeg.isFilter() {
+		// Delete array element by key=value filter
+		if parent.Kind != yaml.SequenceNode {
+			return nil
+		}
+		_, idx := findInSequence(parent, lastSeg)
+		if idx < 0 {
+			return nil
+		}
+		parent.Content = append(parent.Content[:idx], parent.Content[idx+1:]...)
+	} else if lastSeg.Index >= 0 {
 		// Delete array element
 		if parent.Kind != yaml.SequenceNode {
 			return nil
