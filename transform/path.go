@@ -238,7 +238,14 @@ func navigateOrCreate(root *yaml.Node, segments []PathSegment) *yaml.Node {
 			found := false
 			for j := 0; j < len(node.Content); j += 2 {
 				if j+1 < len(node.Content) && node.Content[j].Value == seg.Key {
-					node = node.Content[j+1]
+					child := node.Content[j+1]
+					if child.Kind == yaml.ScalarNode {
+						// Replace scalar/null value with a new mapping node
+						newMap := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+						node.Content[j+1] = newMap
+						child = newMap
+					}
+					node = child
 					found = true
 					break
 				}

@@ -244,6 +244,32 @@ env:
 	require.Equal(t, "{{ .Values.databaseURL }}", node.Value)
 }
 
+func TestSetValueAtPath_NullIntermediateValue(t *testing.T) {
+	root := parseYAML(t, "metadata:\n  annotations: null")
+	segments, _ := ParsePath(".metadata.annotations.mykey")
+
+	err := SetValueAtPath(root, segments, "myvalue")
+	require.NoError(t, err)
+
+	node, _, _, err := GetNodeAtPath(root, segments)
+	require.NoError(t, err)
+	require.NotNil(t, node)
+	require.Equal(t, "myvalue", node.Value)
+}
+
+func TestSetValueAtPath_ScalarIntermediateValue(t *testing.T) {
+	root := parseYAML(t, "metadata:\n  annotations: some-scalar")
+	segments, _ := ParsePath(".metadata.annotations.mykey")
+
+	err := SetValueAtPath(root, segments, "myvalue")
+	require.NoError(t, err)
+
+	node, _, _, err := GetNodeAtPath(root, segments)
+	require.NoError(t, err)
+	require.NotNil(t, node)
+	require.Equal(t, "myvalue", node.Value)
+}
+
 func TestDeleteAtPath_KeyValueFilter(t *testing.T) {
 	root := parseYAML(t, `
 env:
