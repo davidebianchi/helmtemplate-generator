@@ -57,6 +57,8 @@ linters:
         - name: comment-spacings
     embeddedstructfieldcheck:
       empty-line: false
+    lll:
+      line-length: 150
 formatters:
   enable:
     - gofmt

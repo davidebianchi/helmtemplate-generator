@@ -54,6 +54,14 @@ func (cfg *Config) validate() error {
 		if !validRuleActions[rule.Action] {
 			return fmt.Errorf("rule %d: unknown action %q (valid: set, delete, inject)", i, rule.Action)
 		}
+		if err := validateRuleSetAction(i, rule); err != nil {
+			return err
+		}
+		if rule.InjectRaw != nil {
+			if pos := rule.InjectRaw.Position; pos != "" && pos != "replace" {
+				return fmt.Errorf("rule %d: unsupported injectRaw position %q (only \"replace\" is supported)", i, pos)
+			}
+		}
 		for j, change := range rule.Changes {
 			if change.Path == "" {
 				return fmt.Errorf("rule %d, change %d: path is required", i, j)
@@ -61,7 +69,38 @@ func (cfg *Config) validate() error {
 			if !validChangeActions[change.Action] {
 				return fmt.Errorf("rule %d, change %d: unknown action %q (valid: set, delete)", i, j, change.Action)
 			}
+			if err := validateChangeSetAction(i, j, change); err != nil {
+				return err
+			}
 		}
+	}
+	return nil
+}
+
+func validateRuleSetAction(i int, rule Rule) error {
+	action := rule.Action
+	if action != "" && action != "set" {
+		return nil
+	}
+	if rule.Path == "" {
+		return nil
+	}
+	if rule.Value == "" && rule.ReplaceWith == "" && rule.AppendWith == "" && rule.InjectRaw == nil {
+		return fmt.Errorf("rule %d: set action requires at least one of value, replaceWith, appendWith, or injectRaw", i)
+	}
+	return nil
+}
+
+func validateChangeSetAction(i, j int, change Change) error {
+	action := change.Action
+	if action != "" && action != "set" {
+		return nil
+	}
+	if change.Value == "" && change.ReplaceWith == "" && change.AppendWith == "" && change.WrapValue == nil {
+		return fmt.Errorf(
+			"rule %d, change %d: set action requires at least one of value, replaceWith, appendWith, or wrapValue",
+			i, j,
+		)
 	}
 	return nil
 }

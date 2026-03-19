@@ -92,6 +92,13 @@ func TestUnquoteHelmTemplates_NoTemplates(t *testing.T) {
 	require.Equal(t, input, result)
 }
 
+func TestUnquoteHelmTemplates_URLInValue(t *testing.T) {
+	input := `url: "http://host:8080/{{ .Values.path }}"`
+	result := unquoteHelmTemplates(input)
+	expected := `url: http://host:8080/{{ .Values.path }}`
+	require.Equal(t, expected, result)
+}
+
 func TestSerialize_RoundTrip(t *testing.T) {
 	input := "kind: ConfigMap\nmetadata:\n  name: test\ndata:\n  key: value"
 	docs, err := ParseDocuments([]byte(input))

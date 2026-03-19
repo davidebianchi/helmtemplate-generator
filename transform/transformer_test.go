@@ -597,7 +597,7 @@ func TestTransform_AppendWith_NoMatch(t *testing.T) {
 		},
 	}
 
-	input := `apiVersion: v1
+	const input = `apiVersion: v1
 kind: ConfigMap
 metadata:
   name: my-config
@@ -658,7 +658,7 @@ func TestTransform_AddMapKey_NewAnnotation(t *testing.T) {
 		},
 	}
 
-	input := `apiVersion: v1
+	const input = `apiVersion: v1
 kind: ConfigMap
 metadata:
   name: my-config

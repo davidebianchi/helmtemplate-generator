@@ -128,3 +128,71 @@ func TestLoad_Validation_RuleWithoutPathOrChanges(t *testing.T) {
 	_, err = Load(cfgPath)
 	require.Error(t, err)
 }
+
+func TestLoad_Validation_InjectRawUnsupportedPosition(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	content := `rules:
+  - path: .metadata.name
+    action: inject
+    injectRaw:
+      position: before
+      content: "some content"
+`
+	err := os.WriteFile(cfgPath, []byte(content), 0600)
+	require.NoError(t, err)
+
+	_, err = Load(cfgPath)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "unsupported injectRaw position")
+}
+
+func TestLoad_Validation_InjectRawReplacePosition(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	content := `rules:
+  - path: .metadata.name
+    action: inject
+    injectRaw:
+      position: replace
+      content: "some content"
+`
+	err := os.WriteFile(cfgPath, []byte(content), 0600)
+	require.NoError(t, err)
+
+	cfg, err := Load(cfgPath)
+	require.NoError(t, err)
+	require.Len(t, cfg.Rules, 1)
+}
+
+func TestLoad_Validation_SetActionWithNoValue(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	content := `rules:
+  - path: .metadata.name
+`
+	err := os.WriteFile(cfgPath, []byte(content), 0600)
+	require.NoError(t, err)
+
+	_, err = Load(cfgPath)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "set action requires")
+}
+
+func TestLoad_Validation_ChangeSetActionWithNoValue(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	content := `rules:
+  - match:
+      kinds:
+        - Deployment
+    changes:
+      - path: .metadata.name
+`
+	err := os.WriteFile(cfgPath, []byte(content), 0600)
+	require.NoError(t, err)
+
+	_, err = Load(cfgPath)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "set action requires")
+}

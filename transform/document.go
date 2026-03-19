@@ -124,7 +124,7 @@ func unquoteHelmTemplates(input string) string {
 func unquoteLine(line, quote string) string {
 	// Find pattern: key: 'value' or key: "value"
 	// We need to find the colon, then the quoted value
-	colonIdx := strings.Index(line, ":")
+	colonIdx := strings.Index(line, ": ")
 	if colonIdx == -1 {
 		return line
 	}

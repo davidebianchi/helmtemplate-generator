@@ -1,8 +1,6 @@
 package transform
 
 import (
-	"path/filepath"
-
 	"github.com/davidebianchi/helmtemplate-generator/config"
 )
 
@@ -40,8 +38,7 @@ func MatchesDocument(doc *Document, match *config.Match) bool {
 		docName := doc.GetName()
 		nameMatched := false
 		for _, pattern := range match.Names {
-			matched, err := filepath.Match(pattern, docName)
-			if err == nil && matched {
+			if matchWildcard(pattern, docName) {
 				nameMatched = true
 				break
 			}

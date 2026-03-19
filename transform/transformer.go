@@ -274,21 +274,11 @@ func (t *Transformer) applyInjectRaw(
 	})
 
 	switch inject.Position {
-	case "replace":
+	case "", "replace":
 		return SetValueAtPath(doc.Root, segments, placeholder)
-	case "before", "after":
-		// For before/after, we need special handling in the output
-		node, _, _, err := GetNodeAtPath(doc.Root, segments)
-		if err != nil {
-			return err
-		}
-		if node != nil {
-			// Mark the node for injection
-			node.LineComment = placeholder
-		}
+	default:
+		return fmt.Errorf("unsupported injectRaw position %q (only \"replace\" is supported)", inject.Position)
 	}
-
-	return nil
 }
 
 // appendPlaceholderToSequence navigates to the SequenceNode at the given path
