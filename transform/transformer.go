@@ -127,7 +127,7 @@ func (t *Transformer) transformDocument(doc *Document) (string, error) {
 
 		// Multiple changes
 		for _, change := range rule.Changes {
-			if err := t.applyChange(doc, &change, &fieldReplacements); err != nil {
+			if err := t.applyChange(doc, &change, &fieldReplacements, &rootAppends); err != nil {
 				return "", fmt.Errorf("change path %s: %w", change.Path, err)
 			}
 		}
@@ -219,7 +219,7 @@ func (t *Transformer) applyPathChange(doc *Document, rule *config.Rule, replacem
 	return nil
 }
 
-func (t *Transformer) applyChange(doc *Document, change *config.Change, replacements *[]fieldReplacement) error {
+func (t *Transformer) applyChange(doc *Document, change *config.Change, replacements *[]fieldReplacement, rootAppends *[]string) error {
 	segments, err := ParsePath(change.Path)
 	if err != nil {
 		return fmt.Errorf("invalid path %s: %w", change.Path, err)
@@ -247,6 +247,10 @@ func (t *Transformer) applyChange(doc *Document, change *config.Change, replacem
 			return SetValueAtPath(doc.Root, segments, placeholder)
 		}
 		if change.AppendWith != "" {
+			if len(segments) == 0 {
+				*rootAppends = append(*rootAppends, change.AppendWith)
+				return nil
+			}
 			placeholder := fmt.Sprintf("__HELMGEN_APPEND_%d__", len(*replacements))
 			*replacements = append(*replacements, fieldReplacement{
 				placeholder: placeholder,

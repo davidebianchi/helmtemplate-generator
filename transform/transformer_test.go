@@ -350,6 +350,36 @@ spec:
 	)
 }
 
+func TestTransform_AppendWith_RootPath_InChanges(t *testing.T) {
+	cfg := &config.Config{
+		Rules: []config.Rule{
+			{
+				Match: &config.Match{Kinds: []string{"Deployment"}},
+				Changes: []config.Change{
+					{
+						Path:       ".",
+						AppendWith: `{{- include "mychart.extra" . | nindent 0 }}`,
+					},
+				},
+			},
+		},
+	}
+
+	input := `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-deployment
+spec:
+  replicas: 1`
+
+	transformer := New(cfg)
+	output, err := transformer.Transform([]byte(input))
+	require.NoError(t, err)
+
+	require.Contains(t, output, "replicas: 1")
+	require.Contains(t, output, `{{- include "mychart.extra" . | nindent 0 }}`)
+}
+
 func TestTransform_UnknownAction(t *testing.T) {
 	cfg := &config.Config{
 		Rules: []config.Rule{
