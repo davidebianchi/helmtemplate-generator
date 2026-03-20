@@ -9,8 +9,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// pathSegmentRe matches quoted key ["..."], key=value filter [key=value], array index [N], or unquoted key
-var pathSegmentRe = regexp.MustCompile(`\["([^"]+)"\]|\[([^=\]]+)=([^\]]+)\]|\[(\d+)\]|([^.\[\]]+)`)
+// pathSegmentRe matches quoted key ["..."], key=value filter [key=value], wildcard [*], array index [N], or unquoted key
+var pathSegmentRe = regexp.MustCompile(`\["([^"]+)"\]|\[([^=\]]+)=([^\]]+)\]|\[(\*)\]|\[(\d+)\]|([^.\[\]]+)`)
 
 // PathSegment represents a segment in a YAML path
 type PathSegment struct {
@@ -18,6 +18,7 @@ type PathSegment struct {
 	Index     int    // For array access (-1 if not array)
 	FilterKey string // For array filter access: [key=value]
 	FilterVal string // For array filter access: [key=value]
+	Wildcard  bool   // For wildcard array access: [*]
 }
 
 // ParsePath parses a JSONPath-like string into segments
@@ -48,15 +49,18 @@ func ParsePath(path string) ([]PathSegment, error) {
 			// Key=value filter segment: [name=FOO]
 			segments = append(segments, PathSegment{Index: -1, FilterKey: match[2], FilterVal: match[3]})
 		case match[4] != "":
+			// Wildcard segment: [*]
+			segments = append(segments, PathSegment{Index: -1, Wildcard: true})
+		case match[5] != "":
 			// Array index segment: [0]
-			idx, err := strconv.Atoi(match[4])
+			idx, err := strconv.Atoi(match[5])
 			if err != nil {
-				return nil, fmt.Errorf("invalid array index: %s", match[4])
+				return nil, fmt.Errorf("invalid array index: %s", match[5])
 			}
 			segments = append(segments, PathSegment{Index: idx})
-		case match[5] != "":
+		case match[6] != "":
 			// Unquoted key segment
-			segments = append(segments, PathSegment{Key: match[5], Index: -1})
+			segments = append(segments, PathSegment{Key: match[6], Index: -1})
 		}
 	}
 
@@ -66,6 +70,63 @@ func ParsePath(path string) ([]PathSegment, error) {
 // isFilter returns true if the segment uses key=value array filtering
 func (s PathSegment) isFilter() bool {
 	return s.FilterKey != ""
+}
+
+// containsWildcard returns true if any segment in the path uses [*]
+func containsWildcard(segments []PathSegment) bool {
+	for _, s := range segments {
+		if s.Wildcard {
+			return true
+		}
+	}
+	return false
+}
+
+// splitAtWildcard splits segments into: before the wildcard, and after the wildcard.
+// It navigates to the sequence node before the wildcard and calls fn for each element
+// with the remaining segments.
+func forEachInWildcard(root *yaml.Node, segments []PathSegment, fn func(elem *yaml.Node, rest []PathSegment) error) error {
+	// Find the first wildcard
+	wildcardIdx := -1
+	for i, s := range segments {
+		if s.Wildcard {
+			wildcardIdx = i
+			break
+		}
+	}
+	if wildcardIdx < 0 {
+		return fmt.Errorf("no wildcard segment found")
+	}
+
+	// Navigate to the sequence node before the wildcard
+	var seqNode *yaml.Node
+	if wildcardIdx == 0 {
+		seqNode = root
+		if seqNode.Kind == yaml.DocumentNode && len(seqNode.Content) > 0 {
+			seqNode = seqNode.Content[0]
+		}
+	} else {
+		var err error
+		seqNode, _, _, err = GetNodeAtPath(root, segments[:wildcardIdx])
+		if err != nil {
+			return err
+		}
+		if seqNode == nil {
+			return fmt.Errorf("node not found at path before wildcard")
+		}
+	}
+
+	if seqNode.Kind != yaml.SequenceNode {
+		return fmt.Errorf("expected sequence for wildcard [*], got node kind %d", seqNode.Kind)
+	}
+
+	rest := segments[wildcardIdx+1:]
+	for _, elem := range seqNode.Content {
+		if err := fn(elem, rest); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // findInSequence finds the first element in a SequenceNode where the child
@@ -105,6 +166,8 @@ func GetNodeAtPath(root *yaml.Node, segments []PathSegment) (*yaml.Node, *yaml.N
 		isLast := i == len(segments)-1
 
 		switch {
+		case seg.Wildcard:
+			return nil, nil, -1, fmt.Errorf("wildcard [*] is not supported in GetNodeAtPath; use SetValueAtPath or DeleteAtPath")
 		case seg.isFilter():
 			// Array filter access: [key=value]
 			if node.Kind != yaml.SequenceNode {
@@ -162,6 +225,14 @@ func GetNodeAtPath(root *yaml.Node, segments []PathSegment) (*yaml.Node, *yaml.N
 func SetValueAtPath(root *yaml.Node, segments []PathSegment, value string) error {
 	if len(segments) == 0 {
 		return fmt.Errorf("empty path")
+	}
+
+	if containsWildcard(segments) {
+		return forEachInWildcard(root, segments, func(elem *yaml.Node, rest []PathSegment) error {
+			// Wrap element in a temporary document for recursive call
+			wrapper := &yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{elem}}
+			return SetValueAtPath(wrapper, rest, value)
+		})
 	}
 
 	// Navigate to parent, creating intermediate maps as needed
@@ -244,6 +315,8 @@ func navigateOrCreate(root *yaml.Node, segments []PathSegment) *yaml.Node {
 
 	for _, seg := range segments {
 		switch {
+		case seg.Wildcard:
+			return nil
 		case seg.isFilter():
 			// Array filter access — cannot create elements
 			if node.Kind != yaml.SequenceNode {
@@ -309,6 +382,13 @@ func createScalarNode(value string) *yaml.Node {
 func DeleteAtPath(root *yaml.Node, segments []PathSegment) error {
 	if len(segments) == 0 {
 		return fmt.Errorf("empty path")
+	}
+
+	if containsWildcard(segments) {
+		return forEachInWildcard(root, segments, func(elem *yaml.Node, rest []PathSegment) error {
+			wrapper := &yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{elem}}
+			return DeleteAtPath(wrapper, rest)
+		})
 	}
 
 	// Navigate to parent

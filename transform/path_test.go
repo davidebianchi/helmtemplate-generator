@@ -291,6 +291,88 @@ func TestSetValueAtPath_ScalarIntermediateValue(t *testing.T) {
 	require.Equal(t, "myvalue", node.Value)
 }
 
+func TestParsePath_Wildcard(t *testing.T) {
+	segments, err := ParsePath(".webhooks[*].clientConfig.service.namespace")
+	require.NoError(t, err)
+	require.Len(t, segments, 5)
+	require.Equal(t, "webhooks", segments[0].Key)
+	require.True(t, segments[1].Wildcard)
+	require.Equal(t, -1, segments[1].Index)
+	require.Equal(t, "clientConfig", segments[2].Key)
+	require.Equal(t, "service", segments[3].Key)
+	require.Equal(t, "namespace", segments[4].Key)
+}
+
+func TestSetValueAtPath_Wildcard(t *testing.T) {
+	root := parseYAML(t, `
+webhooks:
+  - name: webhook1
+    clientConfig:
+      service:
+        namespace: ns1
+  - name: webhook2
+    clientConfig:
+      service:
+        namespace: ns2
+`)
+	segments, err := ParsePath(".webhooks[*].clientConfig.service.namespace")
+	require.NoError(t, err)
+
+	err = SetValueAtPath(root, segments, "{{ .Release.Namespace }}")
+	require.NoError(t, err)
+
+	// Verify both elements were updated
+	s1, _ := ParsePath(".webhooks[0].clientConfig.service.namespace")
+	node1, _, _, err := GetNodeAtPath(root, s1)
+	require.NoError(t, err)
+	require.Equal(t, "{{ .Release.Namespace }}", node1.Value)
+
+	s2, _ := ParsePath(".webhooks[1].clientConfig.service.namespace")
+	node2, _, _, err := GetNodeAtPath(root, s2)
+	require.NoError(t, err)
+	require.Equal(t, "{{ .Release.Namespace }}", node2.Value)
+}
+
+func TestDeleteAtPath_Wildcard(t *testing.T) {
+	root := parseYAML(t, `
+items:
+  - name: a
+    extra: remove-me
+  - name: b
+    extra: remove-me-too
+`)
+	segments, err := ParsePath(".items[*].extra")
+	require.NoError(t, err)
+
+	err = DeleteAtPath(root, segments)
+	require.NoError(t, err)
+
+	// Verify extra was deleted from both
+	s1, _ := ParsePath(".items[0].extra")
+	node1, _, _, _ := GetNodeAtPath(root, s1)
+	require.Nil(t, node1)
+
+	s2, _ := ParsePath(".items[1].extra")
+	node2, _, _, _ := GetNodeAtPath(root, s2)
+	require.Nil(t, node2)
+
+	// Verify name fields still exist
+	n1, _ := ParsePath(".items[0].name")
+	nameNode, _, _, err := GetNodeAtPath(root, n1)
+	require.NoError(t, err)
+	require.Equal(t, "a", nameNode.Value)
+}
+
+func TestSetValueAtPath_Wildcard_NotSequence(t *testing.T) {
+	root := parseYAML(t, "metadata:\n  name: test")
+	segments, err := ParsePath(".metadata[*].name")
+	require.NoError(t, err)
+
+	err = SetValueAtPath(root, segments, "value")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "expected sequence for wildcard")
+}
+
 func TestDeleteAtPath_KeyValueFilter(t *testing.T) {
 	root := parseYAML(t, `
 env:
