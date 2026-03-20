@@ -291,6 +291,65 @@ spec:
 	require.NotContains(t, output, "my-secret")
 }
 
+func TestTransform_ReplaceWith_RootPath(t *testing.T) {
+	cfg := &config.Config{
+		Rules: []config.Rule{
+			{
+				Match: &config.Match{Kinds: []string{"Deployment"}},
+				Path:  ".",
+				ReplaceWith: `{{- include "mychart.deployment" . }}`,
+			},
+		},
+	}
+
+	input := `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-deployment
+spec:
+  replicas: 1`
+
+	transformer := New(cfg)
+	output, err := transformer.Transform([]byte(input))
+	require.NoError(t, err)
+
+	require.Contains(t, output, `{{- include "mychart.deployment" . }}`)
+	require.NotContains(t, output, "replicas:")
+}
+
+func TestTransform_AppendWith_RootPath(t *testing.T) {
+	cfg := &config.Config{
+		Rules: []config.Rule{
+			{
+				Match:      &config.Match{Kinds: []string{"Deployment"}},
+				Path:       ".",
+				AppendWith: `{{- include "mychart.extra" . | nindent 0 }}`,
+			},
+		},
+	}
+
+	input := `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-deployment
+spec:
+  replicas: 1`
+
+	transformer := New(cfg)
+	output, err := transformer.Transform([]byte(input))
+	require.NoError(t, err)
+
+	// Existing content should be preserved
+	require.Contains(t, output, "replicas: 1")
+	require.Contains(t, output, "name: my-deployment")
+	// Appended content should be at the end
+	require.Contains(t, output, `{{- include "mychart.extra" . | nindent 0 }}`)
+	require.True(t,
+		strings.HasSuffix(strings.TrimSpace(output), `{{- include "mychart.extra" . | nindent 0 }}`),
+		"Expected appended content at end\nGot:\n%s", output,
+	)
+}
+
 func TestTransform_UnknownAction(t *testing.T) {
 	cfg := &config.Config{
 		Rules: []config.Rule{

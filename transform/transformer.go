@@ -102,9 +102,10 @@ func (t *Transformer) transformDocument(doc *Document) (string, error) {
 		}
 	}
 
-	// Track wraps to apply after serialization
+	// Track wraps and appends to apply after serialization
 	var docWrap *config.Wrap
 	var fieldReplacements []fieldReplacement
+	var rootAppends []string
 
 	// Apply rules
 	for _, rule := range t.config.Rules {
@@ -119,7 +120,7 @@ func (t *Transformer) transformDocument(doc *Document) (string, error) {
 
 		// Single path/value change
 		if rule.Path != "" {
-			if err := t.applyPathChange(doc, &rule, &fieldReplacements); err != nil {
+			if err := t.applyPathChange(doc, &rule, &fieldReplacements, &rootAppends); err != nil {
 				return "", fmt.Errorf("rule path %s: %w", rule.Path, err)
 			}
 		}
@@ -143,6 +144,11 @@ func (t *Transformer) transformDocument(doc *Document) (string, error) {
 		output = applyFieldReplacement(output, fr)
 	}
 
+	// Apply root-level appends
+	for _, content := range rootAppends {
+		output = output + "\n" + strings.TrimSuffix(content, "\n")
+	}
+
 	// Apply document wrap
 	if docWrap != nil {
 		output = docWrap.Before + "\n" + output + "\n" + docWrap.After
@@ -159,7 +165,7 @@ type fieldReplacement struct {
 	isAppend    bool
 }
 
-func (t *Transformer) applyPathChange(doc *Document, rule *config.Rule, replacements *[]fieldReplacement) error {
+func (t *Transformer) applyPathChange(doc *Document, rule *config.Rule, replacements *[]fieldReplacement, rootAppends *[]string) error {
 	segments, err := ParsePath(rule.Path)
 	if err != nil {
 		return fmt.Errorf("invalid path %s: %w", rule.Path, err)
@@ -188,6 +194,11 @@ func (t *Transformer) applyPathChange(doc *Document, rule *config.Rule, replacem
 			return SetValueAtPath(doc.Root, segments, placeholder)
 		}
 		if rule.AppendWith != "" {
+			// Root-level append: inject raw content after the document
+			if len(segments) == 0 {
+				*rootAppends = append(*rootAppends, rule.AppendWith)
+				return nil
+			}
 			placeholder := fmt.Sprintf("__HELMGEN_APPEND_%d__", len(*replacements))
 			*replacements = append(*replacements, fieldReplacement{
 				placeholder: placeholder,

@@ -66,7 +66,32 @@ func TestSetValueAtPath_NewKey(t *testing.T) {
 func TestSetValueAtPath_EmptyPath(t *testing.T) {
 	root := parseYAML(t, "key: value")
 	err := SetValueAtPath(root, nil, "test")
-	require.Error(t, err)
+	require.NoError(t, err)
+
+	// Root node should now be a scalar
+	node := root
+	if node.Kind == yaml.DocumentNode && len(node.Content) > 0 {
+		node = node.Content[0]
+	}
+	require.Equal(t, yaml.ScalarNode, node.Kind)
+	require.Equal(t, "test", node.Value)
+}
+
+func TestSetValueAtPath_RootPath(t *testing.T) {
+	root := parseYAML(t, "metadata:\n  name: test")
+	segments, err := ParsePath(".")
+	require.NoError(t, err)
+	require.Empty(t, segments)
+
+	err = SetValueAtPath(root, segments, "placeholder")
+	require.NoError(t, err)
+
+	node := root
+	if node.Kind == yaml.DocumentNode && len(node.Content) > 0 {
+		node = node.Content[0]
+	}
+	require.Equal(t, yaml.ScalarNode, node.Kind)
+	require.Equal(t, "placeholder", node.Value)
 }
 
 func TestDeleteAtPath_ExistingKey(t *testing.T) {

@@ -453,6 +453,80 @@ rules:
     action: delete
 ```
 
+#### Root-level operations
+
+Use `path: .` to operate on the entire document.
+
+**Replace the entire document** with raw template content using `replaceWith`:
+
+Config:
+```yaml
+rules:
+  - match:
+      kinds:
+        - Deployment
+    path: .
+    replaceWith: |
+      {{- include "mychart.deployment" . }}
+```
+
+<details>
+<summary>Before / After</summary>
+
+Before:
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-deployment
+spec:
+  replicas: 1
+```
+
+After:
+```yaml
+{{- include "mychart.deployment" . }}
+```
+</details>
+
+**Append raw content** at the end of the document using `appendWith`:
+
+Config:
+```yaml
+rules:
+  - match:
+      kinds:
+        - Deployment
+    path: .
+    appendWith: |
+      {{- include "mychart.extra" . | nindent 0 }}
+```
+
+<details>
+<summary>Before / After</summary>
+
+Before:
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-deployment
+spec:
+  replicas: 1
+```
+
+After:
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-deployment
+spec:
+  replicas: 1
+{{- include "mychart.extra" . | nindent 0 }}
+```
+</details>
+
 ### `output`
 
 Controls how multi-document output is organized.

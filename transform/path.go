@@ -224,7 +224,16 @@ func GetNodeAtPath(root *yaml.Node, segments []PathSegment) (*yaml.Node, *yaml.N
 // create the "annotations" map if it doesn't exist.
 func SetValueAtPath(root *yaml.Node, segments []PathSegment, value string) error {
 	if len(segments) == 0 {
-		return fmt.Errorf("empty path")
+		// Root replacement: replace the entire document content with a scalar
+		node := root
+		if node.Kind == yaml.DocumentNode && len(node.Content) > 0 {
+			node = node.Content[0]
+		}
+		node.Kind = yaml.ScalarNode
+		node.Content = nil
+		node.Value = value
+		node.Tag = "!!str"
+		return nil
 	}
 
 	if containsWildcard(segments) {
