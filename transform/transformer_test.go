@@ -19,8 +19,12 @@ func TestTransform_SimpleReplacement(t *testing.T) {
 	cfg := &config.Config{
 		Rules: []config.Rule{
 			{
-				Path:  ".metadata.namespace",
-				Value: `{{ .Release.Namespace }}`,
+				Changes: []config.Change{
+					{
+						Path:  ".metadata.namespace",
+						Value: `{{ .Release.Namespace }}`,
+					},
+				},
 			},
 		},
 	}
@@ -70,8 +74,12 @@ func TestTransform_MatchKind(t *testing.T) {
 		Rules: []config.Rule{
 			{
 				Match: &config.Match{Kinds: []string{"Deployment"}},
-				Path:  ".spec.replicas",
-				Value: `{{ .Values.replicas }}`,
+				Changes: []config.Change{
+					{
+						Path:  ".spec.replicas",
+						Value: `{{ .Values.replicas }}`,
+					},
+				},
 			},
 		},
 	}
@@ -95,8 +103,12 @@ func TestTransform_MatchKindNoMatch(t *testing.T) {
 		Rules: []config.Rule{
 			{
 				Match: &config.Match{Kinds: []string{"Deployment"}},
-				Path:  ".spec.replicas",
-				Value: `{{ .Values.replicas }}`,
+				Changes: []config.Change{
+					{
+						Path:  ".spec.replicas",
+						Value: `{{ .Values.replicas }}`,
+					},
+				},
 			},
 		},
 	}
@@ -191,8 +203,12 @@ func TestTransform_MultiDocument(t *testing.T) {
 	cfg := &config.Config{
 		Rules: []config.Rule{
 			{
-				Path:  ".metadata.namespace",
-				Value: `{{ .Release.Namespace }}`,
+				Changes: []config.Change{
+					{
+						Path:  ".metadata.namespace",
+						Value: `{{ .Release.Namespace }}`,
+					},
+				},
 			},
 		},
 	}
@@ -230,8 +246,12 @@ func TestTransform_MatchNameWildcard(t *testing.T) {
 					Kinds: []string{"Deployment"},
 					Names: []string{"my-*"},
 				},
-				Path:  ".spec.replicas",
-				Value: `{{ .Values.replicas }}`,
+				Changes: []config.Change{
+					{
+						Path:  ".spec.replicas",
+						Value: `{{ .Values.replicas }}`,
+					},
+				},
 			},
 		},
 	}
@@ -264,11 +284,15 @@ func TestTransform_ReplaceWith(t *testing.T) {
 		Rules: []config.Rule{
 			{
 				Match: &config.Match{Kinds: []string{"Deployment"}},
-				Path:  ".spec.template.spec.imagePullSecrets",
-				ReplaceWith: `{{- with .Values.imagePullSecrets }}
+				Changes: []config.Change{
+					{
+						Path: ".spec.template.spec.imagePullSecrets",
+						ReplaceWith: `{{- with .Values.imagePullSecrets }}
 imagePullSecrets:
   {{- toYaml . | nindent 8 }}
 {{- end }}`,
+					},
+				},
 			},
 		},
 	}
@@ -296,8 +320,12 @@ func TestTransform_ReplaceWith_RootPath(t *testing.T) {
 		Rules: []config.Rule{
 			{
 				Match: &config.Match{Kinds: []string{"Deployment"}},
-				Path:  ".",
-				ReplaceWith: `{{- include "mychart.deployment" . }}`,
+				Changes: []config.Change{
+					{
+						Path:        ".",
+						ReplaceWith: `{{- include "mychart.deployment" . }}`,
+					},
+				},
 			},
 		},
 	}
@@ -321,9 +349,13 @@ func TestTransform_AppendWith_RootPath(t *testing.T) {
 	cfg := &config.Config{
 		Rules: []config.Rule{
 			{
-				Match:      &config.Match{Kinds: []string{"Deployment"}},
-				Path:       ".",
-				AppendWith: `{{- include "mychart.extra" . | nindent 0 }}`,
+				Match: &config.Match{Kinds: []string{"Deployment"}},
+				Changes: []config.Change{
+					{
+						Path:       ".",
+						AppendWith: `{{- include "mychart.extra" . | nindent 0 }}`,
+					},
+				},
 			},
 		},
 	}
@@ -350,42 +382,17 @@ spec:
 	)
 }
 
-func TestTransform_AppendWith_RootPath_InChanges(t *testing.T) {
-	cfg := &config.Config{
-		Rules: []config.Rule{
-			{
-				Match: &config.Match{Kinds: []string{"Deployment"}},
-				Changes: []config.Change{
-					{
-						Path:       ".",
-						AppendWith: `{{- include "mychart.extra" . | nindent 0 }}`,
-					},
-				},
-			},
-		},
-	}
-
-	input := `apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: my-deployment
-spec:
-  replicas: 1`
-
-	transformer := New(cfg)
-	output, err := transformer.Transform([]byte(input))
-	require.NoError(t, err)
-
-	require.Contains(t, output, "replicas: 1")
-	require.Contains(t, output, `{{- include "mychart.extra" . | nindent 0 }}`)
-}
-
 func TestTransform_UnknownAction(t *testing.T) {
 	cfg := &config.Config{
 		Rules: []config.Rule{
 			{
-				Path:   ".metadata.name",
-				Action: "patch",
+				Changes: []config.Change{
+					{
+						Path:   ".metadata.name",
+						Action: "patch",
+						Value:  "test",
+					},
+				},
 			},
 		},
 	}
@@ -417,8 +424,12 @@ func TestTransformDocuments(t *testing.T) {
 	cfg := &config.Config{
 		Rules: []config.Rule{
 			{
-				Path:  ".metadata.namespace",
-				Value: `{{ .Release.Namespace }}`,
+				Changes: []config.Change{
+					{
+						Path:  ".metadata.namespace",
+						Value: `{{ .Release.Namespace }}`,
+					},
+				},
 			},
 		},
 	}
@@ -458,8 +469,12 @@ func TestTransform_FilterIncludeKind(t *testing.T) {
 		},
 		Rules: []config.Rule{
 			{
-				Path:  ".metadata.namespace",
-				Value: `{{ .Release.Namespace }}`,
+				Changes: []config.Change{
+					{
+						Path:  ".metadata.namespace",
+						Value: `{{ .Release.Namespace }}`,
+					},
+				},
 			},
 		},
 	}
@@ -510,8 +525,12 @@ func TestTransform_FilterExcludeKind(t *testing.T) {
 		},
 		Rules: []config.Rule{
 			{
-				Path:  ".metadata.namespace",
-				Value: `{{ .Release.Namespace }}`,
+				Changes: []config.Change{
+					{
+						Path:  ".metadata.namespace",
+						Value: `{{ .Release.Namespace }}`,
+					},
+				},
 			},
 		},
 	}
@@ -581,8 +600,12 @@ func TestTransform_DeleteAction(t *testing.T) {
 	cfg := &config.Config{
 		Rules: []config.Rule{
 			{
-				Path:   ".metadata.annotations",
-				Action: "delete",
+				Changes: []config.Change{
+					{
+						Path:   ".metadata.annotations",
+						Action: "delete",
+					},
+				},
 			},
 		},
 	}
@@ -607,9 +630,13 @@ func TestTransform_AppendWith(t *testing.T) {
 	cfg := &config.Config{
 		Rules: []config.Rule{
 			{
-				Match:      &config.Match{Kinds: []string{kindDeployment}},
-				Path:       ".spec.template.spec.containers[0].env",
-				AppendWith: `{{- include "myapp.extraEnv" . | nindent 12 }}`,
+				Match: &config.Match{Kinds: []string{kindDeployment}},
+				Changes: []config.Change{
+					{
+						Path:       ".spec.template.spec.containers[0].env",
+						AppendWith: `{{- include "myapp.extraEnv" . | nindent 12 }}`,
+					},
+				},
 			},
 		},
 	}
@@ -642,9 +669,13 @@ func TestTransform_AppendWith_PreservesExistingElements(t *testing.T) {
 	cfg := &config.Config{
 		Rules: []config.Rule{
 			{
-				Match:      &config.Match{Kinds: []string{kindDeployment}},
-				Path:       ".spec.template.spec.containers[0].env",
-				AppendWith: `{{- include "myapp.extraEnv" . | nindent 12 }}`,
+				Match: &config.Match{Kinds: []string{kindDeployment}},
+				Changes: []config.Change{
+					{
+						Path:       ".spec.template.spec.containers[0].env",
+						AppendWith: `{{- include "myapp.extraEnv" . | nindent 12 }}`,
+					},
+				},
 			},
 		},
 	}
@@ -679,9 +710,13 @@ func TestTransform_AppendWith_NoMatch(t *testing.T) {
 	cfg := &config.Config{
 		Rules: []config.Rule{
 			{
-				Match:      &config.Match{Kinds: []string{kindDeployment}},
-				Path:       ".spec.template.spec.containers[0].env",
-				AppendWith: `{{- include "myapp.extraEnv" . | nindent 12 }}`,
+				Match: &config.Match{Kinds: []string{kindDeployment}},
+				Changes: []config.Change{
+					{
+						Path:       ".spec.template.spec.containers[0].env",
+						AppendWith: `{{- include "myapp.extraEnv" . | nindent 12 }}`,
+					},
+				},
 			},
 		},
 	}
@@ -701,48 +736,16 @@ data:
 	require.NotContains(t, output, "extraEnv")
 }
 
-func TestTransform_AppendWith_InChanges(t *testing.T) {
-	cfg := &config.Config{
-		Rules: []config.Rule{
-			{
-				Match: &config.Match{Kinds: []string{kindDeployment}},
-				Changes: []config.Change{
-					{
-						Path:       ".spec.template.spec.containers[0].env",
-						AppendWith: `{{- include "myapp.extraEnv" . | nindent 12 }}`,
-					},
-				},
-			},
-		},
-	}
-
-	input := `apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: my-deployment
-spec:
-  template:
-    spec:
-      containers:
-        - name: my-container
-          env:
-            - name: FOO
-              value: bar`
-
-	transformer := New(cfg)
-	output, err := transformer.Transform([]byte(input))
-	require.NoError(t, err)
-
-	require.Contains(t, output, "name: FOO")
-	require.Contains(t, output, `{{- include "myapp.extraEnv" . | nindent 12 }}`)
-}
-
 func TestTransform_AddMapKey_NewAnnotation(t *testing.T) {
 	cfg := &config.Config{
 		Rules: []config.Rule{
 			{
-				Path:  ".metadata.annotations.my-annotation",
-				Value: "keep",
+				Changes: []config.Change{
+					{
+						Path:  ".metadata.annotations.my-annotation",
+						Value: "keep",
+					},
+				},
 			},
 		},
 	}
@@ -766,8 +769,12 @@ func TestTransform_AddMapKey_ExistingAnnotations(t *testing.T) {
 	cfg := &config.Config{
 		Rules: []config.Rule{
 			{
-				Path:  ".metadata.annotations.new-annotation",
-				Value: `{{ .Values.myAnnotation }}`,
+				Changes: []config.Change{
+					{
+						Path:  ".metadata.annotations.new-annotation",
+						Value: `{{ .Values.myAnnotation }}`,
+					},
+				},
 			},
 		},
 	}
@@ -793,8 +800,12 @@ func TestTransform_AddMapKey_QuotedDottedKey(t *testing.T) {
 	cfg := &config.Config{
 		Rules: []config.Rule{
 			{
-				Path:  `.metadata.annotations["helm.sh/resource-policy"]`,
-				Value: "keep",
+				Changes: []config.Change{
+					{
+						Path:  `.metadata.annotations["helm.sh/resource-policy"]`,
+						Value: "keep",
+					},
+				},
 			},
 		},
 	}
@@ -818,8 +829,12 @@ func TestTransform_AppendWith_NonSequenceError(t *testing.T) {
 	cfg := &config.Config{
 		Rules: []config.Rule{
 			{
-				Path:       ".metadata.name",
-				AppendWith: "some content",
+				Changes: []config.Change{
+					{
+						Path:       ".metadata.name",
+						AppendWith: "some content",
+					},
+				},
 			},
 		},
 	}

@@ -114,18 +114,11 @@ func (t *Transformer) transformDocument(doc *Document) (string, error) {
 		}
 
 		// Document-level wrap
-		if rule.Wrap != nil && rule.Path == "" {
+		if rule.Wrap != nil {
 			docWrap = rule.Wrap
 		}
 
-		// Single path/value change
-		if rule.Path != "" {
-			if err := t.applyPathChange(doc, &rule, &fieldReplacements, &rootAppends); err != nil {
-				return "", fmt.Errorf("rule path %s: %w", rule.Path, err)
-			}
-		}
-
-		// Multiple changes
+		// Apply changes
 		for _, change := range rule.Changes {
 			if err := t.applyChange(doc, &change, &fieldReplacements, &rootAppends); err != nil {
 				return "", fmt.Errorf("change path %s: %w", change.Path, err)
@@ -163,60 +156,6 @@ type fieldReplacement struct {
 	fieldKey    string
 	wrapValue   *config.WrapValue
 	isAppend    bool
-}
-
-func (t *Transformer) applyPathChange(doc *Document, rule *config.Rule, replacements *[]fieldReplacement, rootAppends *[]string) error {
-	segments, err := ParsePath(rule.Path)
-	if err != nil {
-		return fmt.Errorf("invalid path %s: %w", rule.Path, err)
-	}
-
-	action := rule.Action
-	if action == "" {
-		action = actionSet
-	}
-
-	switch action {
-	case "delete":
-		return DeleteAtPath(doc.Root, segments)
-	case actionSet:
-		if rule.Value != "" {
-			return SetValueAtPath(doc.Root, segments, rule.Value)
-		}
-		if rule.ReplaceWith != "" {
-			// Use placeholder for complex replacement
-			placeholder := fmt.Sprintf("__HELMGEN_REPLACE_%d__", len(*replacements))
-			*replacements = append(*replacements, fieldReplacement{
-				placeholder: placeholder,
-				content:     rule.ReplaceWith,
-				fieldKey:    getLastPathKey(segments),
-			})
-			return SetValueAtPath(doc.Root, segments, placeholder)
-		}
-		if rule.AppendWith != "" {
-			// Root-level append: inject raw content after the document
-			if len(segments) == 0 {
-				*rootAppends = append(*rootAppends, rule.AppendWith)
-				return nil
-			}
-			placeholder := fmt.Sprintf("__HELMGEN_APPEND_%d__", len(*replacements))
-			*replacements = append(*replacements, fieldReplacement{
-				placeholder: placeholder,
-				content:     rule.AppendWith,
-				fieldKey:    getLastPathKey(segments),
-				isAppend:    true,
-			})
-			return appendPlaceholderToSequence(doc.Root, segments, placeholder)
-		}
-	case "inject":
-		if rule.InjectRaw != nil {
-			return t.applyInjectRaw(doc, segments, rule.InjectRaw, replacements)
-		}
-	default:
-		return fmt.Errorf("unknown action %q for path %s (valid actions: set, delete, inject)", action, rule.Path)
-	}
-
-	return nil
 }
 
 func (t *Transformer) applyChange(doc *Document, change *config.Change, replacements *[]fieldReplacement, rootAppends *[]string) error {
@@ -269,8 +208,12 @@ func (t *Transformer) applyChange(doc *Document, change *config.Change, replacem
 			})
 			return SetValueAtPath(doc.Root, segments, placeholder)
 		}
+	case "inject":
+		if change.InjectRaw != nil {
+			return t.applyInjectRaw(doc, segments, change.InjectRaw, replacements)
+		}
 	default:
-		return fmt.Errorf("unknown action %q for path %s (valid actions: set, delete)", action, change.Path)
+		return fmt.Errorf("unknown action %q for path %s (valid actions: set, delete, inject)", action, change.Path)
 	}
 
 	return nil

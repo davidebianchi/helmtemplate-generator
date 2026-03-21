@@ -102,7 +102,7 @@ global:
 
 ### `rules`
 
-A list of transformation rules. Each rule can optionally match specific resources and apply changes.
+A list of transformation rules. Each rule can optionally match specific resources and define changes to apply.
 
 #### Matching resources
 
@@ -119,6 +119,8 @@ rules:
         - "my-*"
       labels:                  # All labels must match
         app: myapp
+    changes:
+      - ...
 ```
 
 #### Setting values
@@ -128,8 +130,9 @@ Replace a field's value with a Helm template expression.
 Config:
 ```yaml
 rules:
-  - path: .metadata.namespace
-    value: '{{ .Release.Namespace }}'
+  - changes:
+      - path: .metadata.namespace
+        value: '{{ .Release.Namespace }}'
 ```
 
 <details>
@@ -150,7 +153,7 @@ metadata:
 ```
 </details>
 
-You can group multiple changes in a single rule:
+Multiple changes can be grouped in a single rule:
 
 ```yaml
 rules:
@@ -171,8 +174,9 @@ Set a value at a path that doesn't exist yet. Intermediate mapping nodes are cre
 Config:
 ```yaml
 rules:
-  - path: .metadata.annotations.my-annotation
-    value: '{{ .Values.myAnnotation }}'
+  - changes:
+      - path: .metadata.annotations.my-annotation
+        value: '{{ .Values.myAnnotation }}'
 ```
 
 <details>
@@ -198,8 +202,9 @@ For keys containing dots (e.g., Kubernetes annotations), use the quoted bracket 
 Config:
 ```yaml
 rules:
-  - path: '.metadata.annotations["helm.sh/resource-policy"]'
-    value: keep
+  - changes:
+      - path: '.metadata.annotations["helm.sh/resource-policy"]'
+        value: keep
 ```
 
 <details>
@@ -225,8 +230,9 @@ If the map already exists, the new key is appended:
 Config:
 ```yaml
 rules:
-  - path: .metadata.annotations.new-key
-    value: new-value
+  - changes:
+      - path: .metadata.annotations.new-key
+        value: new-value
 ```
 
 <details>
@@ -255,8 +261,9 @@ metadata:
 Config:
 ```yaml
 rules:
-  - path: .metadata.annotations
-    action: delete
+  - changes:
+      - path: .metadata.annotations
+        action: delete
 ```
 
 <details>
@@ -328,12 +335,13 @@ rules:
   - match:
       kinds:
         - Deployment
-    path: .spec.template.spec.imagePullSecrets
-    replaceWith: |
-      {{- with .Values.imagePullSecrets }}
-      imagePullSecrets:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
+    changes:
+      - path: .spec.template.spec.imagePullSecrets
+        replaceWith: |
+          {{- with .Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 8 }}
+          {{- end }}
 ```
 
 <details>
@@ -374,9 +382,10 @@ rules:
   - match:
       kinds:
         - Deployment
-    path: .spec.template.spec.containers[0].env
-    appendWith: |
-      {{- include "mychart.extraEnv" . | nindent 12 }}
+    changes:
+      - path: .spec.template.spec.containers[0].env
+        appendWith: |
+          {{- include "mychart.extraEnv" . | nindent 12 }}
 ```
 
 <details>
@@ -412,8 +421,9 @@ rules:
   - match:
       kinds:
         - Deployment
-    path: .spec.template.spec.containers[0].env[name=DATABASE_URL].value
-    value: '{{ .Values.databaseURL }}'
+    changes:
+      - path: .spec.template.spec.containers[0].env[name=DATABASE_URL].value
+        value: '{{ .Values.databaseURL }}'
 ```
 
 <details>
@@ -449,8 +459,9 @@ rules:
   - match:
       kinds:
         - Deployment
-    path: .spec.template.spec.containers[0].env[name=TO_REMOVE]
-    action: delete
+    changes:
+      - path: .spec.template.spec.containers[0].env[name=TO_REMOVE]
+        action: delete
 ```
 
 #### Root-level operations
@@ -465,9 +476,10 @@ rules:
   - match:
       kinds:
         - Deployment
-    path: .
-    replaceWith: |
-      {{- include "mychart.deployment" . }}
+    changes:
+      - path: .
+        replaceWith: |
+          {{- include "mychart.deployment" . }}
 ```
 
 <details>
@@ -497,9 +509,10 @@ rules:
   - match:
       kinds:
         - Deployment
-    path: .
-    appendWith: |
-      {{- include "mychart.extra" . | nindent 0 }}
+    changes:
+      - path: .
+        appendWith: |
+          {{- include "mychart.extra" . | nindent 0 }}
 ```
 
 <details>
@@ -561,6 +574,7 @@ Paths use a JSONPath-like dot notation:
 
 | Syntax | Description |
 |--------|-------------|
+| `.` | Root document (for root-level operations) |
 | `.metadata.name` | Access map keys |
 | `.spec.containers[0].image` | Access array elements by index |
 | `.metadata.annotations["helm.sh/resource-policy"]` | Access keys containing dots |

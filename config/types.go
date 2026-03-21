@@ -61,22 +61,10 @@ type GlobalRules struct {
 type Rule struct {
 	// Match criteria for selecting resources (optional - if empty, applies to all)
 	Match *Match `yaml:"match,omitempty"`
-	// Path to the field to modify (JSONPath-like syntax)
-	Path string `yaml:"path,omitempty"`
-	// Value to set at the path (can include Helm template syntax)
-	Value string `yaml:"value,omitempty"`
-	// Action to perform: set (default), delete, inject
-	Action string `yaml:"action,omitempty"`
-	// Changes to apply (alternative to single path/value)
+	// Changes to apply
 	Changes []Change `yaml:"changes,omitempty"`
 	// Wrap the entire matched resource
 	Wrap *Wrap `yaml:"wrap,omitempty"`
-	// ReplaceWith replaces the field at path with raw content
-	ReplaceWith string `yaml:"replaceWith,omitempty"`
-	// AppendWith appends raw content to the end of an array at path
-	AppendWith string `yaml:"appendWith,omitempty"`
-	// InjectRaw injects raw content at the path
-	InjectRaw *InjectRaw `yaml:"injectRaw,omitempty"`
 }
 
 // Match criteria for selecting resources
@@ -97,7 +85,7 @@ type Change struct {
 	Path string `yaml:"path"`
 	// Value to set (can include Helm template syntax)
 	Value string `yaml:"value,omitempty"`
-	// Action: set (default), delete
+	// Action: set (default), delete, inject
 	Action string `yaml:"action,omitempty"`
 	// ReplaceWith replaces the field with raw content
 	ReplaceWith string `yaml:"replaceWith,omitempty"`
@@ -105,6 +93,8 @@ type Change struct {
 	AppendWith string `yaml:"appendWith,omitempty"`
 	// WrapValue wraps the field value with conditions
 	WrapValue *WrapValue `yaml:"wrapValue,omitempty"`
+	// InjectRaw injects raw content at the path
+	InjectRaw *InjectRaw `yaml:"injectRaw,omitempty"`
 }
 
 // Wrap wraps a resource or field with before/after content
