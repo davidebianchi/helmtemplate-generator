@@ -141,7 +141,7 @@ func TestTransform_DocumentWrap(t *testing.T) {
 		},
 	}
 
-	input := `apiVersion: apps/v1
+	const input = `apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: my-deployment
