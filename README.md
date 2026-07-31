@@ -464,6 +464,55 @@ rules:
         action: delete
 ```
 
+#### Glob patterns in array filters
+
+Filter values support glob patterns (`*`, `?`, `[...]`) for matching multiple elements. This is particularly useful with `delete` to remove all elements matching a prefix.
+
+Config:
+```yaml
+rules:
+  - match:
+      kinds:
+        - Deployment
+    changes:
+      - path: .spec.template.spec.containers[name=my-app].env[name=PREFIX_*]
+        action: delete
+```
+
+<details>
+<summary>Before / After</summary>
+
+Before:
+```yaml
+containers:
+  - name: my-app
+    env:
+      - name: PREFIX_FOO
+        value: foo
+      - name: PREFIX_BAR
+        value: bar
+      - name: OTHER
+        value: keep
+```
+
+After:
+```yaml
+containers:
+  - name: my-app
+    env:
+      - name: OTHER
+        value: keep
+```
+</details>
+
+Supported glob characters:
+
+| Pattern | Matches                    |
+| ------- | -------------------------- |
+| `*`     | Any sequence of characters |
+| `?`     | Any single character       |
+| `[abc]` | Any character in the set   |
+
 #### Root-level operations
 
 Use `path: .` to operate on the entire document.
@@ -579,6 +628,7 @@ Paths use a JSONPath-like dot notation:
 | `.spec.containers[0].image` | Access array elements by index |
 | `.metadata.annotations["helm.sh/resource-policy"]` | Access keys containing dots |
 | `.spec.containers[0].env[name=FOO].value` | Filter array elements by key=value |
+| `.env[name=RELATED_IMAGE_*]` | Filter with glob pattern (`*`, `?`, `[...]`) |
 
 ## Development
 

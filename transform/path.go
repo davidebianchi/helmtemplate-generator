@@ -2,6 +2,7 @@ package transform
 
 import (
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -129,8 +130,19 @@ func forEachInWildcard(root *yaml.Node, segments []PathSegment, fn func(elem *ya
 	return nil
 }
 
+// matchFilterValue returns true if value matches the filter pattern.
+// Uses filepath.Match (glob) when the pattern contains wildcard characters,
+// otherwise uses exact string comparison.
+func matchFilterValue(pattern, value string) bool {
+	if strings.ContainsAny(pattern, "*?[") {
+		matched, err := filepath.Match(pattern, value)
+		return err == nil && matched
+	}
+	return pattern == value
+}
+
 // findInSequence finds the first element in a SequenceNode where the child
-// map key FilterKey has value FilterVal. Returns the element and its index.
+// map key FilterKey has value matching FilterVal. Returns the element and its index.
 func findInSequence(node *yaml.Node, seg PathSegment) (*yaml.Node, int) {
 	for i, elem := range node.Content {
 		if elem.Kind != yaml.MappingNode {
@@ -139,12 +151,37 @@ func findInSequence(node *yaml.Node, seg PathSegment) (*yaml.Node, int) {
 		for j := 0; j < len(elem.Content); j += 2 {
 			if j+1 < len(elem.Content) &&
 				elem.Content[j].Value == seg.FilterKey &&
-				elem.Content[j+1].Value == seg.FilterVal {
+				matchFilterValue(seg.FilterVal, elem.Content[j+1].Value) {
 				return elem, i
 			}
 		}
 	}
 	return nil, -1
+}
+
+// findAllInSequence finds all elements in a SequenceNode where the child
+// map key FilterKey has value matching FilterVal. Returns indices in descending
+// order for safe removal.
+func findAllInSequence(node *yaml.Node, seg PathSegment) []int {
+	var indices []int
+	for i, elem := range node.Content {
+		if elem.Kind != yaml.MappingNode {
+			continue
+		}
+		for j := 0; j < len(elem.Content); j += 2 {
+			if j+1 < len(elem.Content) &&
+				elem.Content[j].Value == seg.FilterKey &&
+				matchFilterValue(seg.FilterVal, elem.Content[j+1].Value) {
+				indices = append(indices, i)
+				break
+			}
+		}
+	}
+	// Reverse for safe removal from end to start
+	for i, j := 0, len(indices)-1; i < j; i, j = i+1, j-1 {
+		indices[i], indices[j] = indices[j], indices[i]
+	}
+	return indices
 }
 
 // GetNodeAtPath traverses the YAML tree and returns the node at the given path
@@ -425,15 +462,14 @@ func DeleteAtPath(root *yaml.Node, segments []PathSegment) error {
 
 	switch {
 	case lastSeg.isFilter():
-		// Delete array element by key=value filter
+		// Delete array element(s) by key=value filter
 		if parent.Kind != yaml.SequenceNode {
 			return nil
 		}
-		_, idx := findInSequence(parent, lastSeg)
-		if idx < 0 {
-			return nil
+		indices := findAllInSequence(parent, lastSeg)
+		for _, idx := range indices {
+			parent.Content = append(parent.Content[:idx], parent.Content[idx+1:]...)
 		}
-		parent.Content = append(parent.Content[:idx], parent.Content[idx+1:]...)
 	case lastSeg.Index >= 0:
 		// Delete array element
 		if parent.Kind != yaml.SequenceNode {

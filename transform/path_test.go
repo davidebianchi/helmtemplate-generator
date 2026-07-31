@@ -419,3 +419,91 @@ env:
 	require.NotNil(t, node)
 	require.Len(t, node.Content, 2)
 }
+
+func TestDeleteAtPath_KeyValueFilter_GlobPattern(t *testing.T) {
+	root := parseYAML(t, `
+env:
+  - name: PREFIX_FOO
+    value: foo
+  - name: KEEP_ME
+    value: keep
+  - name: PREFIX_BAR
+    value: bar
+  - name: PREFIX_BAZ
+    value: baz
+  - name: OTHER
+    value: other
+`)
+	segments, err := ParsePath(".env[name=PREFIX_*]")
+	require.NoError(t, err)
+
+	err = DeleteAtPath(root, segments)
+	require.NoError(t, err)
+
+	envSegs, _ := ParsePath(".env")
+	node, _, _, _ := GetNodeAtPath(root, envSegs)
+	require.NotNil(t, node)
+	require.Len(t, node.Content, 2)
+
+	// Verify remaining elements
+	require.Equal(t, "KEEP_ME", node.Content[0].Content[1].Value)
+	require.Equal(t, "OTHER", node.Content[1].Content[1].Value)
+}
+
+func TestGetNodeAtPath_KeyValueFilter_GlobPattern(t *testing.T) {
+	root := parseYAML(t, `
+env:
+  - name: PREFIX_FOO
+    value: first
+  - name: OTHER
+    value: other
+`)
+	segments, err := ParsePath(".env[name=PREFIX_*].value")
+	require.NoError(t, err)
+
+	node, _, _, err := GetNodeAtPath(root, segments)
+	require.NoError(t, err)
+	require.NotNil(t, node)
+	require.Equal(t, "first", node.Value)
+}
+
+func TestDeleteAtPath_KeyValueFilter_GlobNoMatch(t *testing.T) {
+	root := parseYAML(t, `
+env:
+  - name: FOO
+    value: bar
+`)
+	segments, err := ParsePath(".env[name=NOMATCH_*]")
+	require.NoError(t, err)
+
+	err = DeleteAtPath(root, segments)
+	require.NoError(t, err)
+
+	envSegs, _ := ParsePath(".env")
+	node, _, _, _ := GetNodeAtPath(root, envSegs)
+	require.NotNil(t, node)
+	require.Len(t, node.Content, 1)
+}
+
+func TestDeleteAtPath_KeyValueFilter_QuestionMarkGlob(t *testing.T) {
+	root := parseYAML(t, `
+items:
+  - id: ab
+    val: one
+  - id: ac
+    val: two
+  - id: bc
+    val: three
+`)
+	segments, err := ParsePath(".items[id=a?]")
+	require.NoError(t, err)
+
+	err = DeleteAtPath(root, segments)
+	require.NoError(t, err)
+
+	itemsSegs, _ := ParsePath(".items")
+	node, _, _, _ := GetNodeAtPath(root, itemsSegs)
+	require.NotNil(t, node)
+	require.Len(t, node.Content, 1)
+	require.Equal(t, "bc", node.Content[0].Content[1].Value)
+}
